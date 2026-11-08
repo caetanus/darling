@@ -144,13 +144,22 @@ UTTypeConformsTo(
   CFStringRef inUTI,
   CFStringRef inConformsToUTI)
 {
+	// OSXER MVP (type conformance): identity and transitive ancestry are part
+	// of the UTI contract. UNION also bounds cyclic declarations in the registry.
+	if (!inUTI || !inConformsToUTI)
+		return FALSE;
+	if (UTTypeEqual(inUTI, inConformsToUTI))
+		return TRUE;
 	FMDatabaseQueue* dq = getDatabaseQueue();
 	if (!dq)
 		return FALSE;
 
 	__block Boolean retval;
 	[dq inDatabase:^(FMDatabase* db) {
-		FMResultSet* rs = [db executeQuery:@"select UC.conforms_to from uti inner join uti_conforms UC on UC.uti=uti.id where type_identifier=? and UC.conforms_to=?",
+		FMResultSet* rs = [db executeQuery:@"WITH RECURSIVE parents(identifier) AS ("
+			@"SELECT ? UNION SELECT UC.conforms_to FROM parents P "
+			@"JOIN uti U ON U.type_identifier=P.identifier JOIN uti_conforms UC ON UC.uti=U.id) "
+			@"SELECT 1 FROM parents WHERE identifier=? LIMIT 1",
 			inUTI, inConformsToUTI];
 
 		retval = [rs next];

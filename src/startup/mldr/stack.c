@@ -69,7 +69,9 @@ void FUNCTION_NAME(const char* filepath, struct load_results* lr)
 	char kernfd[12];
 	char __user* elfcalls_user;
 	char elfcalls[27];
-	char __user* applep_contents[4];
+	// OSXER MVP (main stack): libpthread must see the actual reserved bounds.
+	char main_stack[128];
+	char __user* applep_contents[5];
 
 #define user_long_count(_val) (((_val) + (sizeof(user_long_t) - 1)) / sizeof(user_long_t))
 
@@ -117,7 +119,11 @@ void FUNCTION_NAME(const char* filepath, struct load_results* lr)
 	// `envc`-count pointers for env vars (+1 for NULL)
 	// `sizeof(applep_contents) / sizeof(*applep_contents)`-count pointers for applep arguments (already includes NULL)
 	// space for exepath, kernfd, and elfcalls
-	sp -= 1 + 1 + (lr->argc + 1) + (lr->envc + 1) + (sizeof(applep_contents) / sizeof(*applep_contents)) + user_long_count(exepath_len + sizeof(EXECUTABLE_PATH) + sizeof(kernfd) + sizeof(elfcalls));
+	sp -= 1 + 1 + (lr->argc + 1) + (lr->envc + 1) + (sizeof(applep_contents) / sizeof(*applep_contents)) + user_long_count(exepath_len + sizeof(EXECUTABLE_PATH) + sizeof(kernfd) + sizeof(elfcalls) + sizeof(main_stack));
+	if ((uintptr_t)sp < lr->stack_top - lr->stack_size) {
+		fprintf(stderr, "Arguments exceed the main stack allocation\n");
+		exit(1);
+	}
 
 	exepath_user = (char __user*) lr->stack_top - exepath_len - sizeof(EXECUTABLE_PATH);
 	memcpy(exepath_user, EXECUTABLE_PATH, sizeof(EXECUTABLE_PATH)-1);
@@ -136,11 +142,17 @@ void FUNCTION_NAME(const char* filepath, struct load_results* lr)
 	snprintf(elfcalls, sizeof(elfcalls), "elf_calls=" POINTER_FORMAT, (unsigned long)(uintptr_t)&_elfcalls);
 	elfcalls_user = kernfd_user - sizeof(elfcalls);
 	memcpy(elfcalls_user, elfcalls, sizeof(elfcalls));
+	snprintf(main_stack, sizeof(main_stack), "main_stack=%lx,%lx,%lx,%lx",
+		lr->stack_top, lr->stack_size, lr->stack_top - lr->stack_size - PAGE_SIZE,
+		lr->stack_size + PAGE_SIZE);
+	char __user* main_stack_user = elfcalls_user - sizeof(main_stack);
+	memcpy(main_stack_user, main_stack, strlen(main_stack) + 1);
 
 	applep_contents[0] = exepath_user;
 	applep_contents[1] = kernfd_user;
 	applep_contents[2] = elfcalls_user;
-	applep_contents[3] = NULL;
+	applep_contents[3] = main_stack_user;
+	applep_contents[4] = NULL;
 
 	lr->stack_top = (unsigned long) sp;
 
@@ -212,7 +224,6 @@ void FUNCTION_NAME(const char* filepath, struct load_results* lr)
 
 	// TODO: produce stack_guard, e.g. stack_guard=0xcdd5c48c061b00fd (must contain 00 somewhere!)
 	// TODO: produce malloc_entropy, e.g. malloc_entropy=0x9536cc569d9595cf,0x831942e402da316b
-	// TODO: produce main_stack?
 }
 
 #undef FUNCTION_NAME

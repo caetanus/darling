@@ -63,18 +63,6 @@ void FUNCTION_NAME(int fd, bool expect_dylinker, struct load_results* lr)
 	uint32_t fat_offset;
 	void* tmp_map_base = NULL;
 
-	if (!expect_dylinker)
-	{
-#if defined(GEN_64BIT)
-		setup_space(lr, true);
-#elif defined(GEN_32BIT)
-		lr->_32on64 = true;
-		setup_space(lr, false);
-#else
-		#error Unsupported architecture
-#endif
-	}
-
 	fat_offset = lseek(fd, 0, SEEK_CUR);
 
 	if (read(fd, &header, sizeof(header)) != sizeof(header))
@@ -96,6 +84,42 @@ void FUNCTION_NAME(int fd, bool expect_dylinker, struct load_results* lr)
 	}
 
 	cmds = (void*)((char*)tmp_map_base + sizeof(header));
+
+	// OSXER MVP (main stack): read the requested size before reserving space.
+	// Validate command bounds here, before any segment walk or LC_MAIN access.
+	for (uint32_t i = 0, p = 0; i < header.ncmds; i++) {
+		if (p > header.sizeofcmds || header.sizeofcmds - p < sizeof(struct load_command)) {
+			fprintf(stderr, "Invalid Mach-O load command bounds\n");
+			exit(1);
+		}
+		struct load_command* command = (struct load_command*)&cmds[p];
+		if (command->cmdsize < sizeof(*command) || command->cmdsize > header.sizeofcmds - p) {
+			fprintf(stderr, "Invalid Mach-O load command size\n");
+			exit(1);
+		}
+		if (!expect_dylinker && command->cmd == LC_MAIN) {
+			if (command->cmdsize < sizeof(struct entry_point_command)) {
+				fprintf(stderr, "Invalid LC_MAIN size\n");
+				exit(1);
+			}
+			uint64_t requested = ((struct entry_point_command*)command)->stacksize;
+			if (requested > SIZE_MAX - PAGE_SIZE) {
+				fprintf(stderr, "LC_MAIN stack size exceeds address space\n");
+				exit(1);
+			}
+			if (requested > lr->stack_size)
+				lr->stack_size = requested ? PAGE_ROUNDUP(requested) : 0;
+		}
+		p += command->cmdsize;
+	}
+	if (!expect_dylinker) {
+#if defined(GEN_64BIT)
+		setup_space(lr, true);
+#else
+		lr->_32on64 = true;
+		setup_space(lr, false);
+#endif
+	}
 
 	if ((header.filetype == MH_EXECUTE && header.flags & MH_PIE) || header.filetype == MH_DYLINKER)
 	{
@@ -357,9 +381,7 @@ no_slide:
 			}
 			case LC_MAIN:
 			{
-				struct entry_point_command* ee = (struct entry_point_command*) lc;
-				if (ee->stacksize > lr->stack_size)
-					lr->stack_size = ee->stacksize;
+				// OSXER MVP (main stack): handled before loading any segments.
 				break;
 			}
 			case LC_UUID:

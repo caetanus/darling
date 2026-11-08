@@ -35,6 +35,7 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 #include "commpage.h"
 #include "loader.h"
 #include "socket_bitmap.h"
+#include "main_stack.h"
 #include <sys/resource.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
@@ -95,8 +96,6 @@ uint8_t exe_uuid[16];
 // however, this should not be relied on; a pointer to this should passed around to whoever needs the load_results structure
 __attribute__((used))
 struct load_results mldr_load_results = {0};
-
-static uint32_t stack_size = 0;
 
 #ifdef __i386__
 // how many times mldr32 executed itself again to place the top of the address space
@@ -266,6 +265,8 @@ int main(int argc, char** argv, char** envp)
 		}
 	}
 
+	// OSXER MVP (main stack): preserve the mapping top, not the initial SP.
+	__mldr_main_stack_top = (void*)mldr_load_results.stack_top;
 	if (mldr_load_results._32on64)
 		setup_stack32(filename, &mldr_load_results);
 	else
@@ -285,8 +286,6 @@ int main(int argc, char** argv, char** envp)
 		fprintf(stderr, "Failed to tell darlingserver about our executable path\n");
 		exit(1);
 	}
-
-	__mldr_main_stack_top = (void*)mldr_load_results.stack_top;
 
 	start_thread(&mldr_load_results);
 
@@ -742,15 +741,28 @@ static void ensure_top_range_free(struct load_results* lr, unsigned long stack_s
 
 static void setup_space(struct load_results* lr, bool is_64_bit) {
 	struct rlimit limit;
-	getrlimit(RLIMIT_STACK, &limit);
-	// allocate a few pages 16 pages if it's less than the limit; otherwise, allocate the limit
-	unsigned long size = PAGE_SIZE * 16;
-	if (limit.rlim_cur != RLIM_INFINITY && limit.rlim_cur < size) {
-		size = limit.rlim_cur;
+	// OSXER MVP (main stack): the old 16-page grow-down mapping did not
+	// reserve its future address space and had no explicit lower guard.
+	if (getrlimit(RLIMIT_STACK, &limit) != 0) {
+		perror("Cannot read main stack limit");
+		exit(1);
 	}
+	if (lr->stack_size && limit.rlim_cur != RLIM_INFINITY && lr->stack_size > limit.rlim_cur) {
+		limit.rlim_cur = lr->stack_size;
+		if (setrlimit(RLIMIT_STACK, &limit) != 0) {
+			perror("Cannot honor LC_MAIN stack size");
+			exit(1);
+		}
+	}
+	unsigned long size = mldr_main_stack_size(lr->stack_size ? lr->stack_size : limit.rlim_cur, PAGE_SIZE);
+	if (!size) {
+		perror("Invalid main stack size");
+		exit(1);
+	}
+	lr->stack_size = size;
 
 #ifdef __i386__
-	ensure_top_range_free(lr, size);
+	ensure_top_range_free(lr, size + PAGE_SIZE);
 #endif
 
 	commpage_setup(is_64_bit);
@@ -766,7 +778,7 @@ static void setup_space(struct load_results* lr, bool is_64_bit) {
 	#error Unsupported architecture
 #endif
 
-	if (compatible_mmap((void*)(lr->stack_top - size), size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE | MAP_GROWSDOWN, -1, 0) == MAP_FAILED) {
+	if (mldr_map_main_stack(lr->stack_top, size, PAGE_SIZE) != 0) {
 		fprintf(stderr, "Failed to allocate stack of %lu bytes: %d (%s)\n", size, errno, strerror(errno));
 		exit(1);
 	}

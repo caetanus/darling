@@ -24,9 +24,11 @@
 #include <stdlib.h>
 #include <launch_priv.h>
 #include <errno.h>
+#include <stdint.h>
 #include <os/log.h>
 
 static void get_main_executable_info(CFURLRef appURL, CFStringRef *exec, CFStringRef *bundleName);
+static OSStatus launch_application_with_items(CFURLRef appURL, CFArrayRef items);
 
 static int verbose = 0;
 
@@ -67,9 +69,9 @@ static Boolean is_file_url(CFURLRef url)
 	return ret;
 }
 
-static OSStatus launch_application(CFURLRef appURL, CFURLRef *outLaunchedURL)
+static OSStatus launch_application(CFURLRef appURL, CFArrayRef items, CFURLRef *outLaunchedURL)
 {
-	OSStatus ret = _LSLaunchApplication(appURL);
+	OSStatus ret = launch_application_with_items(appURL, items);
 
 	if (ret == noErr && outLaunchedURL != NULL)
 	{
@@ -82,9 +84,9 @@ static OSStatus launch_application(CFURLRef appURL, CFURLRef *outLaunchedURL)
 
 /*
  * Not supported yet:
- * - Apple Events: an application is started without 'oapp' and documents
- *   opened with an explicit application are not sent to it as 'odoc', so
- *   only the application is launched for them.
+ * - Apple Events: no transport to a running application exists yet.
+ *   OSXER MVP (open documents): new instances receive file paths as argv,
+ *   which AppKit routes to the delegate/document controller at launch.
  * - passThruParams and launchFlags: every call starts a new instance.
  */
 OSStatus LSOpenFromURLSpec(const LSLaunchURLSpec *inLaunchSpec, CFURLRef *outLaunchedURL)
@@ -104,7 +106,7 @@ OSStatus LSOpenFromURLSpec(const LSLaunchURLSpec *inLaunchSpec, CFURLRef *outLau
 	if (inLaunchSpec->appURL != NULL)
 	{
 		/* The application opens all items, so it is launched once */
-		return launch_application(inLaunchSpec->appURL, outLaunchedURL);
+		return launch_application(inLaunchSpec->appURL, inLaunchSpec->itemURLs, outLaunchedURL);
 	}
 
 	if (count == 0)
@@ -116,11 +118,21 @@ OSStatus LSOpenFromURLSpec(const LSLaunchURLSpec *inLaunchSpec, CFURLRef *outLau
 
 		if (is_file_url(url))
 		{
-			/* First check if it's a "mac thing", if not forward to xdg-open */
+			/* OSXER MVP (open documents): use the existing file association API. */
 			if (is_application_url(url))
-				temp = launch_application(url, outLaunchedURL);
-			else
-				temp = kLSApplicationNotFoundErr;
+				temp = launch_application(url, NULL, outLaunchedURL);
+			else {
+				CFURLRef app = NULL;
+				temp = LSGetApplicationForURL(url, kLSRolesAll, NULL, &app);
+				if (temp == noErr && app) {
+					CFArrayRef items = CFArrayCreate(NULL, (const void **)&url, 1, &kCFTypeArrayCallBacks);
+					temp = items ? launch_application(app, items, outLaunchedURL) : memFullErr;
+					if (items) CFRelease(items);
+				} else if (temp == noErr) {
+					temp = kLSApplicationNotFoundErr;
+				}
+				if (app) CFRelease(app);
+			}
 		}
 		else if (_LSIsHostOpenURL(url))
 		{
@@ -139,12 +151,42 @@ OSStatus LSOpenFromURLSpec(const LSLaunchURLSpec *inLaunchSpec, CFURLRef *outLau
 
 OSStatus _LSLaunchApplication(CFURLRef appPath)
 {
+	return launch_application_with_items(appPath, NULL);
+}
+
+// OSXER MVP (open documents): argv owns copied, absolute file paths until spawn.
+static OSStatus launch_application_with_items(CFURLRef appPath, CFArrayRef items)
+{
 	CFStringRef executable = NULL, bundleName = NULL;
 	CFIndex nameSize = 0, execSize = 0;
 	CFURLRef pre = NULL, url_plus_exec = NULL;
 	pid_t pid = -1;
-	char *name = NULL, *exec = NULL, *argv[2];
+	char *name = NULL, *exec = NULL, **argv = NULL;
+	CFIndex count = items ? CFArrayGetCount(items) : 0;
 	OSStatus status = kLSApplicationNotFoundErr;
+	if (count < 0 || (uint64_t) count > SIZE_MAX / sizeof(char *) - 2)
+		return paramErr;
+	argv = calloc((size_t) count + 2, sizeof(char *));
+	if (!argv)
+		return memFullErr;
+	for (CFIndex i = 0; i < count; i++) {
+		CFURLRef item = CFArrayGetValueAtIndex(items, i);
+		if (!item || CFGetTypeID(item) != CFURLGetTypeID() || !is_file_url(item)) {
+			status = paramErr;
+			goto cleanup;
+		}
+		CFURLRef absolute = CFURLCopyAbsoluteURL(item);
+		CFStringRef path = absolute ? CFURLCopyFileSystemPath(absolute, kCFURLPOSIXPathStyle) : NULL;
+		if (absolute) CFRelease(absolute);
+		CFIndex size = path ? CFStringGetMaximumSizeOfFileSystemRepresentation(path) : 0;
+		argv[i + 1] = size > 0 ? malloc(size) : NULL;
+		Boolean converted = argv[i + 1] && CFStringGetFileSystemRepresentation(path, argv[i + 1], size);
+		if (path) CFRelease(path);
+		if (!converted) {
+			status = paramErr;
+			goto cleanup;
+		}
+	}
 
 	/* Read info.plist, find path to main executable */
 	get_main_executable_info(appPath, &executable, &bundleName);
@@ -205,7 +247,6 @@ OSStatus _LSLaunchApplication(CFURLRef appPath)
 	CFRelease(execPath);
 
 	argv[0] = exec;
-	argv[1] = NULL;
 	/* Applications are launchd jobs, as on macOS. */
 	pid = spawn_via_launchd(name, (const char *const *)argv, NULL);
 	if (pid < 0)
@@ -218,6 +259,11 @@ OSStatus _LSLaunchApplication(CFURLRef appPath)
 	status = noErr;
 
 cleanup:
+	if (argv) {
+		for (CFIndex i = 0; i < count; i++)
+			free(argv[i + 1]);
+		free(argv);
+	}
 	if (name)
 		free(name);
 	if (exec)
