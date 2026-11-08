@@ -427,7 +427,10 @@ add_subdirectory(frameworks)
 add_subdirectory(private-frameworks)
 
 # /Applications
-#add_subdirectory(external/TextEdit)
+# OSXER TEXTEDIT (build): TextEdit requires the implemented GUI frameworks.
+if (COMPONENT_gui_frameworks)
+	add_subdirectory(external/TextEdit)
+endif()
 
 # Subprojects after this line need C++ headers
 

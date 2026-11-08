@@ -24,7 +24,7 @@
 	url = https://github.com/darlinghq/darling-compiler-rt.git
 [submodule "src/external/foundation"]
 	path = src/external/foundation
-	url = https://github.com/darlinghq/darling-foundation.git
+	url = https://github.com/caetanus/darling-foundation.git
 [submodule "src/external/corefoundation"]
 	path = src/external/corefoundation
 	url = https://github.com/caetanus/darling-corefoundation.git
@@ -225,7 +225,7 @@
 	url = https://github.com/darlinghq/darling-DirectoryService.git
 [submodule "src/external/TextEdit"]
 	path = src/external/TextEdit
-	url = https://github.com/darlinghq/darling-TextEdit.git
+	url = https://github.com/caetanus/darling-TextEdit.git
 [submodule "src/external/bsm"]
 	path = src/external/bsm
 	url = https://github.com/darlinghq/darling-bsm.git
@@ -305,7 +305,7 @@
 	url = https://github.com/darlinghq/darling-usertemplate.git
 [submodule "src/external/libtrace"]
 	path = src/external/libtrace
-	url = https://github.com/darlinghq/darling-libtrace.git
+	url = https://github.com/caetanus/darling-libtrace.git
 [submodule "src/external/rsync"]
 	path = src/external/rsync
 	url = https://github.com/darlinghq/darling-rsync.git
