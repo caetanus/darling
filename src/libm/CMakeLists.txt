@@ -342,3 +342,8 @@ set(CMAKE_AR "${CMAKE_BINARY_DIR}/src/external/cctools-port/cctools/ar/${APPLE_T
 set(CMAKE_RANLIB "${CMAKE_BINARY_DIR}/src/external/cctools-port/cctools/ar/${APPLE_TARGET_TRIPLET_PRIMARY}-ranlib")
 add_darling_static_library(system_m_static SOURCES ${libm_sources} $<TARGET_OBJECTS:system_m_extra>)
 make_fat(system_m_static)
+
+# osxer: sincos.c defines __sincos_stret/__sincosf_stret from sin()+cos(); with builtins on,
+# clang (Darwin target) folds that sin+cos pair into a call to __sincos_stret itself, so the
+# functions recurse until the stack overflows (any arc/rounded-rect drawing crashed).
+set_source_files_properties(Source/sincos.c PROPERTIES COMPILE_FLAGS "-fno-builtin")
