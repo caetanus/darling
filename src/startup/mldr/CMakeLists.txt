@@ -22,6 +22,7 @@ set(mldr_sources
 	commpage.c
 	elfcalls/elfcalls.c
 	elfcalls/native_fork.c
+	elfcalls/native_dlopen.c
 	elfcalls/threads.c
 )
 

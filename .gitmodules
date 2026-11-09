@@ -450,7 +450,7 @@
 	url = https://github.com/darlinghq/darling-xar.git
 [submodule "src/external/metal"]
 	path = src/external/metal
-	url = https://github.com/darlinghq/darling-metal.git
+	url = https://github.com/caetanus/darling-metal.git
 [submodule "src/external/xnu"]
 	path = src/external/xnu
 	url = https://github.com/darlinghq/darling-xnu.git

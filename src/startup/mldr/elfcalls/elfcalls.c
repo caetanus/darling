@@ -9,6 +9,7 @@
 #include "elfcalls.h"
 #include "threads.h"
 #include "native_fork.h"
+#include "native_dlopen.h"
 #include <sys/un.h>
 #include <sys/socket.h>
 #include <fcntl.h>
@@ -136,4 +137,5 @@ void elfcalls_make(struct elf_calls* calls)
 	calls->native_fork = __mldr_native_fork;
 
 	calls->inherited_nofile_limit = __mldr_inherited_nofile_limit;
+	calls->dlopen_private = __mldr_dlopen_private;
 }

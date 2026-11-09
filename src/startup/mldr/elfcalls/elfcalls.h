@@ -80,6 +80,11 @@ struct elf_calls
 	// process that exec'd this one. Returns 0 and fills limits, or -1 if
 	// there are none (the Linux limit applies).
 	int (*inherited_nofile_limit)(unsigned int limits[2]);
+
+	// OSXER LLVMPIPE (ELF namespace): a new namespace per call, for private
+	// native runtimes accessed exclusively through their own C ABI.
+	// Keep the handle alive while any returned pointers remain in use.
+	void* (*dlopen_private)(const char* name);
 };
 
 #endif
