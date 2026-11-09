@@ -39,6 +39,9 @@ Module.symvers
 !/tests/mldr/**
 !/tests/shellspawn/
 !/tests/shellspawn/**
+# OSXER PREFIX (regression): keep the native prefix setup tests visible.
+!/tests/startup/
+!/tests/startup/**
 
 # The suggested build folder
 build

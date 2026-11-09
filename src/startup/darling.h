@@ -33,12 +33,13 @@ char* defaultPrefixPath(void);
 
 void setupWorkdir(void);
 
-void setupPrefix(void);
+// OSXER PREFIX (initialization): returns nonzero if missing entries were created.
+int setupPrefix(void);
 
 int checkPrefixDir(void);
 
-// Creates the given directory, exit()ing if not possible
-void createDir(const char* path);
+// Creates the given directory, exit()ing if not possible; returns 1 if created.
+int createDir(const char* path);
 
 int connectToShellspawn(void);
 void setupShellspawnEnv(int shellspawnFD);

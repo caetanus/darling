@@ -88,12 +88,12 @@ int main(int argc, char ** argv)
 	unsetenv("DPREFIX");
 	getcwd(g_workingDirectory, sizeof(g_workingDirectory));
 
-	if (!checkPrefixDir())
-	{
-		setupPrefix();
-		g_fixPermissions = true;
-	}
-	checkPrefixOwner();
+	// OSXER PREFIX (initialization): an existing directory may still be empty
+	// or left over from an interrupted first start. Check ownership before
+	// repairing it, and seed only missing directories and account files.
+	if (checkPrefixDir())
+		checkPrefixOwner();
+	g_fixPermissions = setupPrefix();
 	ensureSystemAccounts();
 
 	int c;
@@ -1023,7 +1023,7 @@ char* defaultPrefixPath(void)
 	return buf;
 }
 
-void createDir(const char* path)
+int createDir(const char* path)
 {
 	struct stat st;
 
@@ -1044,6 +1044,7 @@ void createDir(const char* path)
 				fprintf(stderr, "Cannot create %s: %s\n", path, strerror(errno));
 				exit(1);
 			}
+			return 1;
 		}
 		else
 		{
@@ -1051,6 +1052,7 @@ void createDir(const char* path)
 			exit(1);
 		}
 	}
+	return 0;
 }
 
 void setupWorkdir()
@@ -1092,12 +1094,26 @@ int checkPrefixDir()
 	exit(1);
 }
 
-void setupPrefix()
+// OSXER PREFIX (accounts): exclusive creation preserves existing databases,
+// including legacy symlinks, when completing a partially initialized prefix.
+static FILE* createPrefixAccountFile(const char* path)
+{
+	FILE* file = fopen(path, "wx");
+	if (!file && errno != EEXIST)
+	{
+		fprintf(stderr, "Cannot create %s: %s\n", path, strerror(errno));
+		exit(1);
+	}
+	return file;
+}
+
+int setupPrefix()
 {
 	char path[4096];
 	size_t plen;
 	FILE* file;
 	struct passwd* passwd_entry;
+	int created;
 	
 	const char* dirs[] = {
 		"/Volumes",
@@ -1116,12 +1132,10 @@ void setupPrefix()
 		"/var/log"
 	};
 
-	fprintf(stderr, "Setting up a new Darling prefix at %s\n", prefix);
-
-	seteuid(g_originalUid);
 	setegid(g_originalGid);
+	seteuid(g_originalUid);
 
-	createDir(prefix);
+	created = createDir(prefix);
 	strcpy(path, prefix);
 	strcat(path, "/");
 	plen = strlen(path);
@@ -1130,7 +1144,7 @@ void setupPrefix()
 	{
 		path[plen] = '\0';
 		strcat(path, dirs[i]);
-		createDir(path);
+		created |= createDir(path);
 	}
 
 	// create passwd, master.passwd, and group
@@ -1143,60 +1157,57 @@ void setupPrefix()
 
 	path[plen] = '\0';
 	strcat(path, "/private/etc/passwd");
-	file = fopen(path, "w");
-	if (!file) {
-		fprintf(stderr, "Failed to open /private/etc/passwd within the prefix\n");
-		exit(1);
+	file = createPrefixAccountFile(path);
+	if (file) {
+		fprintf(file,
+			"root:*:0:0:System Administrator:/var/root:/bin/sh\n"
+			"%s:*:%d:%d:Darling User:/Users/%s:/bin/bash\n",
+			passwd_entry->pw_name,
+			passwd_entry->pw_uid,
+			passwd_entry->pw_gid,
+			passwd_entry->pw_name
+		);
+		fclose(file);
+		created = 1;
 	}
-
-	fprintf(file,
-		"root:*:0:0:System Administrator:/var/root:/bin/sh\n"
-		"%s:*:%d:%d:Darling User:/Users/%s:/bin/bash\n",
-		passwd_entry->pw_name,
-		passwd_entry->pw_uid,
-		passwd_entry->pw_gid,
-		passwd_entry->pw_name
-	);
-	fclose(file);
 
 	path[plen] = '\0';
 	strcat(path, "/private/etc/master.passwd");
-	file = fopen(path, "w");
-	if (!file) {
-		fprintf(stderr, "Failed to open /private/etc/master.passwd within the prefix\n");
-		exit(1);
+	file = createPrefixAccountFile(path);
+	if (file) {
+		fprintf(file,
+			"root:*:0:0::0:0:System Administrator:/var/root:/bin/sh\n"
+			"%s:*:%d:%d::0:0:Darling User:/Users/%s:/bin/bash\n",
+			passwd_entry->pw_name,
+			passwd_entry->pw_uid,
+			passwd_entry->pw_gid,
+			passwd_entry->pw_name
+		);
+		fclose(file);
+		created = 1;
 	}
-
-	fprintf(file,
-		"root:*:0:0::0:0:System Administrator:/var/root:/bin/sh\n"
-		"%s:*:%d:%d::0:0:Darling User:/Users/%s:/bin/bash\n",
-		passwd_entry->pw_name,
-		passwd_entry->pw_uid,
-		passwd_entry->pw_gid,
-		passwd_entry->pw_name
-	);
-	fclose(file);
 
 	path[plen] = '\0';
 	strcat(path, "/private/etc/group");
-	file = fopen(path, "w");
-	if (!file) {
-		fprintf(stderr, "Failed to open /private/etc/group within the prefix\n");
-		exit(1);
+	file = createPrefixAccountFile(path);
+	if (file) {
+		fprintf(file,
+			"wheel:*:0:root,%s\n"
+			"%s:*:%d:%s\n",
+			passwd_entry->pw_name,
+			passwd_entry->pw_name,
+			passwd_entry->pw_gid,
+			passwd_entry->pw_name
+		);
+		fclose(file);
+		created = 1;
 	}
-
-	fprintf(file,
-		"wheel:*:0:root,%s\n"
-		"%s:*:%d:%s\n",
-		passwd_entry->pw_name,
-		passwd_entry->pw_name,
-		passwd_entry->pw_gid,
-		passwd_entry->pw_name
-	);
-	fclose(file);
 	
 	seteuid(0);
 	setegid(0);
+	if (created)
+		fprintf(stderr, "Initialized missing Darling prefix files at %s\n", prefix);
+	return created;
 }
 
 // macOS ships these service accounts in its local user database. Launchd jobs
