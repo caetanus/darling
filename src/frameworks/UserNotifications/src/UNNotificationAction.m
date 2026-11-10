@@ -19,16 +19,18 @@
 
 #import <UserNotifications/UNNotificationAction.h>
 
-@implementation UNNotificationAction
-
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+// OSXER APPKIT (notifications): value objects as Apple documents them; Darling delivers no
+// notifications (see UNUserNotificationCenter.h).
+@implementation UNNotificationAction { NSString *_identifier, *_title; UNNotificationActionOptions _options; }
++ (instancetype)actionWithIdentifier:(NSString *)identifier title:(NSString *)title
+                             options:(UNNotificationActionOptions)options {
+    UNNotificationAction *a = [[[self alloc] init] autorelease];
+    a->_identifier = [identifier copy]; a->_title = [title copy]; a->_options = options;
+    return a;
 }
-
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
-}
-
+- (NSString *)identifier { return _identifier; }
+- (NSString *)title { return _title; }
+- (UNNotificationActionOptions)options { return _options; }
+- (id)copyWithZone:(NSZone *)zone { return [self retain]; }
+- (void)dealloc { [_identifier release]; [_title release]; [super dealloc]; }
 @end

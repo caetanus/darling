@@ -19,6 +19,30 @@
 
 #include <Foundation/Foundation.h>
 
-@interface UNNotificationContent : NSObject
-
+// OSXER APPKIT (notifications): value objects as Apple documents them; Darling delivers no
+// notifications (see UNUserNotificationCenter.h).
+@class UNNotificationSound;
+@interface UNNotificationContent : NSObject <NSCopying, NSMutableCopying> {
+@protected
+    NSString *_title;
+    NSString *_subtitle;
+    NSString *_body;
+    NSNumber *_badge;
+    UNNotificationSound *_sound;
+    NSDictionary *_userInfo;
+    NSString *_categoryIdentifier;
+    NSString *_threadIdentifier;
+    NSArray *_attachments;
+    NSString *_launchImageName;
+}
+@property (readonly, copy) NSString *title;
+@property (readonly, copy) NSString *subtitle;
+@property (readonly, copy) NSString *body;
+@property (readonly, copy) NSNumber *badge;
+@property (readonly, copy) UNNotificationSound *sound;
+@property (readonly, copy) NSDictionary *userInfo;
+@property (readonly, copy) NSString *categoryIdentifier;
+@property (readonly, copy) NSString *threadIdentifier;
+@property (readonly, copy) NSArray *attachments;
+@property (readonly, copy) NSString *launchImageName;
 @end

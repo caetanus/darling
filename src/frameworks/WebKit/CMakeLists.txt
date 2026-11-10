@@ -166,6 +166,8 @@ add_framework(WebKit
         src/WKWindowFeatures.m
 
     DEPENDENCIES
+        # OSXER NIB (legacy web view geometry)
+        AppKit
         system
         objc
         Foundation

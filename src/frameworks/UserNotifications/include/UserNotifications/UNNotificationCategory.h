@@ -19,6 +19,19 @@
 
 #include <Foundation/Foundation.h>
 
-@interface UNNotificationCategory : NSObject
-
+// OSXER APPKIT (notifications): value objects as Apple documents them; Darling delivers no
+// notifications (see UNUserNotificationCenter.h).
+typedef NS_OPTIONS(NSUInteger, UNNotificationCategoryOptions) {
+    UNNotificationCategoryOptionCustomDismissAction = 1 << 0,
+    UNNotificationCategoryOptionAllowInCarPlay = 1 << 1,
+    UNNotificationCategoryOptionHiddenPreviewsShowTitle = 1 << 2,
+    UNNotificationCategoryOptionHiddenPreviewsShowSubtitle = 1 << 3,
+};
+@interface UNNotificationCategory : NSObject <NSCopying>
++ (instancetype)categoryWithIdentifier:(NSString *)identifier actions:(NSArray *)actions
+                     intentIdentifiers:(NSArray *)intentIdentifiers options:(UNNotificationCategoryOptions)options;
+@property (readonly, copy) NSString *identifier;
+@property (readonly, copy) NSArray *actions;
+@property (readonly, copy) NSArray *intentIdentifiers;
+@property (readonly) UNNotificationCategoryOptions options;
 @end

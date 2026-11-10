@@ -19,16 +19,14 @@
 
 #import <UserNotifications/UNNotificationSound.h>
 
-@implementation UNNotificationSound
-
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+// OSXER APPKIT (notifications): value objects as Apple documents them; Darling delivers no
+// notifications (see UNUserNotificationCenter.h).
+@implementation UNNotificationSound { NSString *_name; }
++ (instancetype)defaultSound { return [[[self alloc] init] autorelease]; }
++ (instancetype)soundNamed:(NSString *)name {
+    UNNotificationSound *s = [[[self alloc] init] autorelease]; s->_name = [name copy]; return s;
 }
-
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
-}
-
+- (NSString *)name { return _name; }
+- (id)copyWithZone:(NSZone *)zone { return [self retain]; }
+- (void)dealloc { [_name release]; [super dealloc]; }
 @end

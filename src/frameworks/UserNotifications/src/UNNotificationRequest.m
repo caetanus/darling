@@ -19,16 +19,20 @@
 
 #import <UserNotifications/UNNotificationRequest.h>
 
-@implementation UNNotificationRequest
+// OSXER APPKIT (notifications): value objects as Apple documents them; Darling delivers no
+// notifications (see UNUserNotificationCenter.h).
+#import <UserNotifications/UNNotificationContent.h>
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+@implementation UNNotificationRequest { NSString *_identifier; UNNotificationContent *_content; id _trigger; }
++ (instancetype)requestWithIdentifier:(NSString *)identifier content:(UNNotificationContent *)content
+                              trigger:(UNNotificationTrigger *)trigger {
+    UNNotificationRequest *r = [[[self alloc] init] autorelease];
+    r->_identifier = [identifier copy]; r->_content = [content copy]; r->_trigger = [(id)trigger retain];
+    return r;
 }
-
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
-}
-
+- (NSString *)identifier { return _identifier; }
+- (UNNotificationContent *)content { return _content; }
+- (UNNotificationTrigger *)trigger { return _trigger; }
+- (id)copyWithZone:(NSZone *)zone { return [self retain]; }
+- (void)dealloc { [_identifier release]; [_content release]; [_trigger release]; [super dealloc]; }
 @end

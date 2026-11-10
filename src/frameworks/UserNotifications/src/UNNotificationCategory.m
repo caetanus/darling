@@ -19,16 +19,22 @@
 
 #import <UserNotifications/UNNotificationCategory.h>
 
-@implementation UNNotificationCategory
-
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+// OSXER APPKIT (notifications): value objects as Apple documents them; Darling delivers no
+// notifications (see UNUserNotificationCenter.h).
+@implementation UNNotificationCategory {
+    NSString *_identifier; NSArray *_actions, *_intentIdentifiers; UNNotificationCategoryOptions _options;
 }
-
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
++ (instancetype)categoryWithIdentifier:(NSString *)identifier actions:(NSArray *)actions
+                     intentIdentifiers:(NSArray *)intentIdentifiers options:(UNNotificationCategoryOptions)options {
+    UNNotificationCategory *c = [[[self alloc] init] autorelease];
+    c->_identifier = [identifier copy]; c->_actions = [actions copy] ?: [@[] retain];
+    c->_intentIdentifiers = [intentIdentifiers copy] ?: [@[] retain]; c->_options = options;
+    return c;
 }
-
+- (NSString *)identifier { return _identifier; }
+- (NSArray *)actions { return _actions; }
+- (NSArray *)intentIdentifiers { return _intentIdentifiers; }
+- (UNNotificationCategoryOptions)options { return _options; }
+- (id)copyWithZone:(NSZone *)zone { return [self retain]; }
+- (void)dealloc { [_identifier release]; [_actions release]; [_intentIdentifiers release]; [super dealloc]; }
 @end

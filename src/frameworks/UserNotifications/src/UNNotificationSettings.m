@@ -21,6 +21,14 @@
 
 @implementation UNNotificationSettings
 
+// OSXER APPKIT (notifications): denied, nothing enabled.
+- (UNAuthorizationStatus)authorizationStatus { return UNAuthorizationStatusDenied; }
+- (UNNotificationSetting)soundSetting { return UNNotificationSettingDisabled; }
+- (UNNotificationSetting)badgeSetting { return UNNotificationSettingDisabled; }
+- (UNNotificationSetting)alertSetting { return UNNotificationSettingDisabled; }
+- (UNNotificationSetting)notificationCenterSetting { return UNNotificationSettingDisabled; }
+
+
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {
     return [NSMethodSignature signatureWithObjCTypes: "v@:"];

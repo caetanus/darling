@@ -19,6 +19,10 @@
 
 #include <Foundation/Foundation.h>
 
-@interface UNNotificationSound : NSObject
-
+// OSXER APPKIT (notifications): value objects as Apple documents them; Darling delivers no
+// notifications (see UNUserNotificationCenter.h).
+@interface UNNotificationSound : NSObject <NSCopying>
++ (instancetype)defaultSound;
++ (instancetype)soundNamed:(NSString *)name;
+@property (readonly, copy) NSString *name;
 @end

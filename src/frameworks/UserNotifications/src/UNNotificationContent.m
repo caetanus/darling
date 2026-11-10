@@ -19,16 +19,36 @@
 
 #import <UserNotifications/UNNotificationContent.h>
 
+// OSXER APPKIT (notifications): value objects as Apple documents them; Darling delivers no
+// notifications (see UNUserNotificationCenter.h).
+#import <UserNotifications/UNMutableNotificationContent.h>
+
 @implementation UNNotificationContent
-
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+- (NSString *)title { return _title; }
+- (NSString *)subtitle { return _subtitle; }
+- (NSString *)body { return _body; }
+- (NSNumber *)badge { return _badge; }
+- (UNNotificationSound *)sound { return _sound; }
+- (NSDictionary *)userInfo { return _userInfo; }
+- (NSString *)categoryIdentifier { return _categoryIdentifier; }
+- (NSString *)threadIdentifier { return _threadIdentifier; }
+- (NSArray *)attachments { return _attachments; }
+- (NSString *)launchImageName { return _launchImageName; }
+- (id)_copyAsClass:(Class)cls {
+    UNNotificationContent *c = [[cls alloc] init];
+    c->_title = [_title copy];
+    c->_subtitle = [_subtitle copy];
+    c->_body = [_body copy];
+    c->_badge = [_badge copy];
+    c->_sound = [_sound copy];
+    c->_userInfo = [_userInfo copy];
+    c->_categoryIdentifier = [_categoryIdentifier copy];
+    c->_threadIdentifier = [_threadIdentifier copy];
+    c->_attachments = [_attachments copy];
+    c->_launchImageName = [_launchImageName copy];
+    return c;
 }
-
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
-}
-
+- (id)copyWithZone:(NSZone *)zone { return [self _copyAsClass:[UNNotificationContent class]]; }
+- (id)mutableCopyWithZone:(NSZone *)zone { return [self _copyAsClass:[UNMutableNotificationContent class]]; }
+- (void)dealloc { [_title release]; [_subtitle release]; [_body release]; [_badge release]; [_sound release]; [_userInfo release]; [_categoryIdentifier release]; [_threadIdentifier release]; [_attachments release]; [_launchImageName release]; [super dealloc]; }
 @end

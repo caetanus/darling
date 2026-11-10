@@ -19,6 +19,17 @@
 
 #include <Foundation/Foundation.h>
 
-@interface UNNotificationAction : NSObject
-
+// OSXER APPKIT (notifications): value objects as Apple documents them; Darling delivers no
+// notifications (see UNUserNotificationCenter.h).
+typedef NS_OPTIONS(NSUInteger, UNNotificationActionOptions) {
+    UNNotificationActionOptionAuthenticationRequired = 1 << 0,
+    UNNotificationActionOptionDestructive = 1 << 1,
+    UNNotificationActionOptionForeground = 1 << 2,
+};
+@interface UNNotificationAction : NSObject <NSCopying>
++ (instancetype)actionWithIdentifier:(NSString *)identifier title:(NSString *)title
+                             options:(UNNotificationActionOptions)options;
+@property (readonly, copy) NSString *identifier;
+@property (readonly, copy) NSString *title;
+@property (readonly) UNNotificationActionOptions options;
 @end

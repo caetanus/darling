@@ -19,6 +19,13 @@
 
 #include <Foundation/Foundation.h>
 
-@interface UNNotificationRequest : NSObject
-
+// OSXER APPKIT (notifications): value objects as Apple documents them; Darling delivers no
+// notifications (see UNUserNotificationCenter.h).
+@class UNNotificationContent, UNNotificationTrigger;
+@interface UNNotificationRequest : NSObject <NSCopying>
++ (instancetype)requestWithIdentifier:(NSString *)identifier content:(UNNotificationContent *)content
+                              trigger:(UNNotificationTrigger *)trigger;
+@property (readonly, copy) NSString *identifier;
+@property (readonly, copy) UNNotificationContent *content;
+@property (readonly, copy) UNNotificationTrigger *trigger;
 @end

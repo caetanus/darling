@@ -22,34 +22,50 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-@interface WebView : NSObject
+// OSXER NIB (legacy web archive): preserve view geometry and preferences.
+// A decoded WebView is not a rendering engine; WebKit rendering remains unavailable.
+#import <AppKit/NSView.h>
+@interface WebView : NSView {
+    NSString *_frameName, *_groupName;
+    id _preferences;
+    BOOL _allowsUndo, _maintainsBackForwardList;
+}
+@property(copy) NSString *frameName, *groupName;
+@property(retain) id preferences;
+@property BOOL allowsUndo, maintainsBackForwardList;
 @end
-
 @implementation WebView
-
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector {
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+@synthesize frameName = _frameName, groupName = _groupName, preferences = _preferences;
+@synthesize allowsUndo = _allowsUndo, maintainsBackForwardList = _maintainsBackForwardList;
+- (id)initWithCoder:(NSCoder *)coder {
+    if ((self = [super initWithCoder:coder])) {
+        _frameName = [[coder decodeObjectForKey:@"FrameName"] copy];
+        _groupName = [[coder decodeObjectForKey:@"GroupName"] copy];
+        _preferences = [[coder decodeObjectForKey:@"Preferences"] retain];
+        _allowsUndo = [coder decodeBoolForKey:@"AllowsUndo"];
+        _maintainsBackForwardList = [coder decodeBoolForKey:@"UseBackForwardList"];
+    }
+    return self;
 }
-
-- (void)forwardInvocation:(NSInvocation *)anInvocation {
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
-}
-
+- (void)dealloc { [_frameName release]; [_groupName release]; [_preferences release]; [super dealloc]; }
 @end
 
-@interface WebPreferences : NSObject
+@interface WebPreferences : NSObject {
+    NSString *_identifier;
+    NSDictionary *_values;
+}
+@property(readonly) NSString *identifier;
 @end
-
 @implementation WebPreferences
-
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector {
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+@synthesize identifier = _identifier;
+- (id)initWithCoder:(NSCoder *)coder {
+    if ((self = [super init])) {
+        _identifier = [[coder decodeObjectForKey:@"Identifier"] copy];
+        _values = [[coder decodeObjectForKey:@"Values"] copy];
+    }
+    return self;
 }
-
-- (void)forwardInvocation:(NSInvocation *)anInvocation {
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
-}
-
+- (void)dealloc { [_identifier release]; [_values release]; [super dealloc]; }
 @end
 
 NSString *WebKitErrorDomain = @"WebKitErrorDomain";

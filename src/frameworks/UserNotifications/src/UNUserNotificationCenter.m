@@ -19,7 +19,88 @@
 
 #import <UserNotifications/UNUserNotificationCenter.h>
 
+#import <UserNotifications/UNNotificationSettings.h>
+#include <dispatch/dispatch.h>
+
+NSString * const UNErrorDomain = @"UNErrorDomain";
+
+static NSError *UNNotAllowed(void)
+{
+    return [NSError errorWithDomain:UNErrorDomain code:UNErrorCodeNotificationsNotAllowed
+        userInfo:@{NSLocalizedDescriptionKey: @"Notifications are not allowed (Darling has no notification service)"}];
+}
+
+static void UNCallLater(dispatch_block_t block)
+{
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), block);
+}
+
 @implementation UNUserNotificationCenter
+@synthesize delegate = _delegate;
+
++ (UNUserNotificationCenter *)currentNotificationCenter
+{
+    static UNUserNotificationCenter *center;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ center = [[UNUserNotificationCenter alloc] init]; });
+    return center;
+}
+
+- (BOOL)supportsContentExtensions { return NO; }
+
+- (void)requestAuthorizationWithOptions:(UNAuthorizationOptions)options
+                      completionHandler:(void (^)(BOOL, NSError *))completionHandler
+{
+    if (!completionHandler) return;
+    completionHandler = [[completionHandler copy] autorelease];
+    UNCallLater(^{ completionHandler(NO, UNNotAllowed()); });
+}
+
+- (void)getNotificationSettingsWithCompletionHandler:(void (^)(UNNotificationSettings *))completionHandler
+{
+    if (!completionHandler) return;
+    completionHandler = [[completionHandler copy] autorelease];
+    UNCallLater(^{ completionHandler([[[UNNotificationSettings alloc] init] autorelease]); });
+}
+
+- (void)setNotificationCategories:(NSSet *)categories {}
+
+- (void)getNotificationCategoriesWithCompletionHandler:(void (^)(NSSet *))completionHandler
+{
+    if (!completionHandler) return;
+    completionHandler = [[completionHandler copy] autorelease];
+    UNCallLater(^{ completionHandler([NSSet set]); });
+}
+
+- (void)addNotificationRequest:(UNNotificationRequest *)request
+         withCompletionHandler:(void (^)(NSError *))completionHandler
+{
+    if (!completionHandler) return;
+    completionHandler = [[completionHandler copy] autorelease];
+    UNCallLater(^{ completionHandler(UNNotAllowed()); });
+}
+
+- (void)getPendingNotificationRequestsWithCompletionHandler:(void (^)(NSArray *))completionHandler
+{
+    if (!completionHandler) return;
+    completionHandler = [[completionHandler copy] autorelease];
+    UNCallLater(^{ completionHandler(@[]); });
+}
+
+- (void)getDeliveredNotificationsWithCompletionHandler:(void (^)(NSArray *))completionHandler
+{
+    if (!completionHandler) return;
+    completionHandler = [[completionHandler copy] autorelease];
+    UNCallLater(^{ completionHandler(@[]); });
+}
+
+- (void)removePendingNotificationRequestsWithIdentifiers:(NSArray *)identifiers {}
+- (void)removeAllPendingNotificationRequests {}
+- (void)removeDeliveredNotificationsWithIdentifiers:(NSArray *)identifiers {}
+- (void)removeAllDeliveredNotifications {}
+
+// Anything else is still logged and ignored, as before.
+
 
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {

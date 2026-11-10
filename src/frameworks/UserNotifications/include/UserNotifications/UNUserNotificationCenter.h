@@ -19,6 +19,51 @@
 
 #include <Foundation/Foundation.h>
 
-@interface UNUserNotificationCenter : NSObject
+// OSXER APPKIT (notifications): Darling has no notification service. The center exists so
+// apps can start: authorization is denied (UNErrorCodeNotificationsNotAllowed), requests fail
+// with that error, queries return nothing. Handlers run on a background queue, as on macOS.
+@class UNNotificationRequest, UNNotificationSettings, UNNotification, UNNotificationResponse;
 
+typedef NS_OPTIONS(NSUInteger, UNAuthorizationOptions) {
+    UNAuthorizationOptionBadge = 1 << 0, UNAuthorizationOptionSound = 1 << 1,
+    UNAuthorizationOptionAlert = 1 << 2, UNAuthorizationOptionCarPlay = 1 << 3,
+    UNAuthorizationOptionCriticalAlert = 1 << 4,
+    UNAuthorizationOptionProvidesAppNotificationSettings = 1 << 5,
+    UNAuthorizationOptionProvisional = 1 << 6,
+};
+typedef NS_OPTIONS(NSUInteger, UNNotificationPresentationOptions) {
+    UNNotificationPresentationOptionBadge = 1 << 0, UNNotificationPresentationOptionSound = 1 << 1,
+    UNNotificationPresentationOptionAlert = 1 << 2, UNNotificationPresentationOptionList = 1 << 3,
+    UNNotificationPresentationOptionBanner = 1 << 4,
+};
+typedef NS_ENUM(NSInteger, UNErrorCode) {
+    UNErrorCodeNotificationsNotAllowed = 1,
+};
+extern NSString * const UNErrorDomain;
+
+@protocol UNUserNotificationCenterDelegate <NSObject>
+@optional
+- (void)userNotificationCenter:(id)center willPresentNotification:(UNNotification *)notification
+         withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler;
+- (void)userNotificationCenter:(id)center didReceiveNotificationResponse:(UNNotificationResponse *)response
+         withCompletionHandler:(void (^)(void))completionHandler;
+@end
+
+@interface UNUserNotificationCenter : NSObject
+@property (assign) id<UNUserNotificationCenterDelegate> delegate;
+@property (readonly) BOOL supportsContentExtensions;
++ (UNUserNotificationCenter *)currentNotificationCenter;
+- (void)requestAuthorizationWithOptions:(UNAuthorizationOptions)options
+                      completionHandler:(void (^)(BOOL granted, NSError *error))completionHandler;
+- (void)getNotificationSettingsWithCompletionHandler:(void (^)(UNNotificationSettings *settings))completionHandler;
+- (void)setNotificationCategories:(NSSet *)categories;
+- (void)getNotificationCategoriesWithCompletionHandler:(void (^)(NSSet *categories))completionHandler;
+- (void)addNotificationRequest:(UNNotificationRequest *)request
+         withCompletionHandler:(void (^)(NSError *error))completionHandler;
+- (void)getPendingNotificationRequestsWithCompletionHandler:(void (^)(NSArray *requests))completionHandler;
+- (void)removePendingNotificationRequestsWithIdentifiers:(NSArray *)identifiers;
+- (void)removeAllPendingNotificationRequests;
+- (void)getDeliveredNotificationsWithCompletionHandler:(void (^)(NSArray *notifications))completionHandler;
+- (void)removeDeliveredNotificationsWithIdentifiers:(NSArray *)identifiers;
+- (void)removeAllDeliveredNotifications;
 @end

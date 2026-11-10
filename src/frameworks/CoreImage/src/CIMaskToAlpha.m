@@ -20,6 +20,10 @@
 #import <CoreImage/CIMaskToAlpha.h>
 
 @implementation CIMaskToAlpha
+// OSXER NIB (stateless filter archive): samples carry no filter parameters.
+- (id)initWithCoder:(NSCoder *)coder { return [self init]; }
+- (void)encodeWithCoder:(NSCoder *)coder { }
+
 
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector {
     return [NSMethodSignature signatureWithObjCTypes: "v@:"];

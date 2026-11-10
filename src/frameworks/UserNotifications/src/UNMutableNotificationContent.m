@@ -19,16 +19,18 @@
 
 #import <UserNotifications/UNMutableNotificationContent.h>
 
+// OSXER APPKIT (notifications): value objects as Apple documents them; Darling delivers no
+// notifications (see UNUserNotificationCenter.h).
 @implementation UNMutableNotificationContent
-
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
-}
-
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
-}
-
+@dynamic title, subtitle, body, badge, sound, userInfo, categoryIdentifier, threadIdentifier, attachments, launchImageName;
+- (void)setTitle:(NSString *)value { value = [value copy]; [_title release]; _title = value; }
+- (void)setSubtitle:(NSString *)value { value = [value copy]; [_subtitle release]; _subtitle = value; }
+- (void)setBody:(NSString *)value { value = [value copy]; [_body release]; _body = value; }
+- (void)setBadge:(NSNumber *)value { value = [value copy]; [_badge release]; _badge = value; }
+- (void)setSound:(UNNotificationSound *)value { value = [value copy]; [_sound release]; _sound = value; }
+- (void)setUserInfo:(NSDictionary *)value { value = [value copy]; [_userInfo release]; _userInfo = value; }
+- (void)setCategoryIdentifier:(NSString *)value { value = [value copy]; [_categoryIdentifier release]; _categoryIdentifier = value; }
+- (void)setThreadIdentifier:(NSString *)value { value = [value copy]; [_threadIdentifier release]; _threadIdentifier = value; }
+- (void)setAttachments:(NSArray *)value { value = [value copy]; [_attachments release]; _attachments = value; }
+- (void)setLaunchImageName:(NSString *)value { value = [value copy]; [_launchImageName release]; _launchImageName = value; }
 @end

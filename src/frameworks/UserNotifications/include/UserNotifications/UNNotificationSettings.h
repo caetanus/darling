@@ -19,6 +19,20 @@
 
 #include <Foundation/Foundation.h>
 
-@interface UNNotificationSettings : NSObject
+// OSXER APPKIT (notifications): Darling reports notifications as not allowed.
+typedef NS_ENUM(NSInteger, UNAuthorizationStatus) {
+    UNAuthorizationStatusNotDetermined = 0, UNAuthorizationStatusDenied,
+    UNAuthorizationStatusAuthorized, UNAuthorizationStatusProvisional,
+    UNAuthorizationStatusEphemeral,
+};
+typedef NS_ENUM(NSInteger, UNNotificationSetting) {
+    UNNotificationSettingNotSupported = 0, UNNotificationSettingDisabled, UNNotificationSettingEnabled,
+};
 
+@interface UNNotificationSettings : NSObject
+@property (readonly) UNAuthorizationStatus authorizationStatus;
+@property (readonly) UNNotificationSetting soundSetting;
+@property (readonly) UNNotificationSetting badgeSetting;
+@property (readonly) UNNotificationSetting alertSetting;
+@property (readonly) UNNotificationSetting notificationCenterSetting;
 @end
