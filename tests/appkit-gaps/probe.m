@@ -5,6 +5,8 @@
 #import <AppKit/NSTouchBar.h>
 #import <AppKit/NSAnimationContext.h>
 #import <AppKit/NSStackView.h>
+#import <AppKit/NSLayoutGuide.h>
+#import <QuartzCore/CAMediaTimingFunction.h>
 #import <Foundation/NSProgress.h>
 #import <AppKit/NSNib.h>
 #import <AppKit/NSPasteboardItem.h>
@@ -649,6 +651,266 @@ static void sharedRoundTwo(NSString *directory) {
     [popover close]; [other orderOut:nil]; [window orderOut:nil];
 }
 
+// OSXER APPKIT (API regression): public contracts, independent of application traffic.
+// https://developer.apple.com/documentation/appkit/nslayoutanchor
+// https://developer.apple.com/documentation/appkit/nstableview
+// https://developer.apple.com/documentation/appkit/nsoutlineview
+@interface OSXERAPIRows : NSObject {
+@public
+    NSMutableArray *items;
+    NSInteger added, removed;
+}
+@end
+@implementation OSXERAPIRows
+- (id)init { if ((self = [super init])) items = [@[@"a", @"b", @"c"] mutableCopy]; return self; }
+- (void)dealloc { [items release]; [super dealloc]; }
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)table { return [items count]; }
+- (id)tableView:(NSTableView *)table objectValueForTableColumn:(NSTableColumn *)column row:(NSInteger)row { return [items objectAtIndex:row]; }
+- (NSView *)tableView:(NSTableView *)table viewForTableColumn:(NSTableColumn *)column row:(NSInteger)row {
+    return [[[NSTableCellView alloc] initWithFrame:NSZeroRect] autorelease];
+}
+- (void)tableView:(NSTableView *)table didAddRowView:(NSTableRowView *)view forRow:(NSInteger)row { ++added; }
+- (void)tableView:(NSTableView *)table didRemoveRowView:(NSTableRowView *)view forRow:(NSInteger)row { ++removed; }
+- (NSInteger)outlineView:(NSOutlineView *)outline numberOfChildrenOfItem:(id)item { return item ? 0 : [items count]; }
+- (id)outlineView:(NSOutlineView *)outline child:(NSInteger)index ofItem:(id)item { return [items objectAtIndex:index]; }
+- (BOOL)outlineView:(NSOutlineView *)outline isItemExpandable:(id)item { return NO; }
+- (id)outlineView:(NSOutlineView *)outline objectValueForTableColumn:(NSTableColumn *)column byItem:(id)item { return item; }
+@end
+
+// OSXER APPKIT (stored-property regression): exercise public setters and cell forwarding.
+@interface OSXERAPILoadController : NSViewController { @public NSInteger loads; }
+@end
+@implementation OSXERAPILoadController
+- (void)loadView { [self setView:[[[NSView alloc] initWithFrame:NSZeroRect] autorelease]]; }
+- (void)viewDidLoad { ++loads; }
+@end
+static void publicAPIProperties(void) {
+    NSButton *button = [NSButton checkboxWithTitle:@"check" target:nil action:NULL];
+    [button setControlSize:NSSmallControlSize]; CHECK([[button cell] controlSize] == NSSmallControlSize);
+    [button setHighlighted:YES]; CHECK([button isHighlighted] && [[button cell] isHighlighted]);
+    [button setIgnoresMultiClick:YES]; CHECK([button ignoresMultiClick]);
+    [button setImageScaling:NSImageScaleProportionallyUpOrDown]; CHECK([button imageScaling] == NSImageScaleProportionallyUpOrDown);
+    [button setImageHugsTitle:YES]; CHECK([button imageHugsTitle]);
+    [button setBezelColor:[NSColor redColor]]; [button setContentTintColor:[NSColor blueColor]];
+    CHECK([[button bezelColor] isEqual:[NSColor redColor]] && [[button contentTintColor] isEqual:[NSColor blueColor]]);
+    [button setPeriodicDelay:0.5 interval:0.1]; float delay=0, interval=0; [button getPeriodicDelay:&delay interval:&interval];
+    CHECK(delay == 0.5 && fabs(interval-0.1) < 0.001);
+    [[button cell] setControlTint:NSGraphiteControlTint]; CHECK([[button cell] controlTint] == NSGraphiteControlTint);
+    [button setAttributedAlternateTitle:[[[NSAttributedString alloc] initWithString:@"alternate"] autorelease]];
+    CHECK([[[button attributedAlternateTitle] string] isEqual:@"alternate"]);
+    CHECK([[NSButton radioButtonWithTitle:@"radio" target:nil action:NULL] title] != nil);
+    CHECK([[NSButton buttonWithTitle:@"image" image:nil target:nil action:NULL] title] != nil);
+    NSTextField *field = [NSTextField wrappingLabelWithString:@"wrap"];
+    CHECK(![field isEditable] && [[field cell] wraps]);
+    field = [NSTextField textFieldWithString:@"value"]; CHECK([[field stringValue] isEqual:@"value"]);
+    [field setBezelStyle:NSTextFieldRoundedBezel]; CHECK([field bezelStyle] == NSTextFieldRoundedBezel);
+    for (NSString *key in @[@"allowsEditingTextAttributes", @"importsGraphics", @"automaticTextCompletionEnabled", @"allowsDefaultTighteningForTruncation"])
+        { [field setValue:@YES forKey:key]; CHECK([[field valueForKey:key] boolValue]); }
+    CHECK([[[NSTextField labelWithAttributedString:[[[NSAttributedString alloc] initWithString:@"label"] autorelease]] stringValue] isEqual:@"label"]);
+    NSSegmentedControl *segments = [NSSegmentedControl segmentedControlWithLabels:@[@"one", @"two"] trackingMode:NSSegmentSwitchTrackingSelectAny target:nil action:NULL];
+    CHECK([segments segmentCount] == 2 && [[segments labelForSegment:1] isEqual:@"two"]);
+    [segments setSpringLoaded:YES]; CHECK([segments isSpringLoaded]);
+    CHECK([[NSSegmentedControl segmentedControlWithImages:@[] trackingMode:NSSegmentSwitchTrackingSelectOne target:nil action:NULL] segmentCount] == 0);
+    NSSlider *slider = [NSSlider sliderWithValue:5 minValue:0 maxValue:10 target:nil action:NULL];
+    CHECK([slider doubleValue] == 5 && [slider maxValue] == 10);
+    [slider setSliderType:NSCircularSlider]; CHECK([slider sliderType] == NSCircularSlider);
+    [slider setTrackFillColor:[NSColor blueColor]]; CHECK([[slider trackFillColor] isEqual:[NSColor blueColor]]);
+    CHECK([[NSSlider sliderWithTarget:nil action:NULL] minValue] == 0);
+    NSScrollView *scroll = [[[NSScrollView alloc] initWithFrame:NSMakeRect(0,0,100,100)] autorelease];
+    [scroll setScrollerStyle:NSScrollerStyleOverlay]; CHECK([scroll scrollerStyle] == NSScrollerStyleOverlay);
+    [scroll setScrollerKnobStyle:NSScrollerKnobStyleLight]; CHECK([scroll scrollerKnobStyle] == NSScrollerKnobStyleLight);
+    [scroll setHorizontalScrollElasticity:NSScrollElasticityNone]; [scroll setVerticalScrollElasticity:NSScrollElasticityAllowed];
+    CHECK([scroll horizontalScrollElasticity] == NSScrollElasticityNone && [scroll verticalScrollElasticity] == NSScrollElasticityAllowed);
+    [scroll setPredominantAxisScrolling:NO]; CHECK(![scroll predominantAxisScrolling]);
+    NSEdgeInsets insets = NSEdgeInsetsMake(1,2,3,4);
+    [scroll setContentInsets:insets]; [scroll setScrollerInsets:insets]; [scroll setAutomaticallyAdjustsContentInsets:NO];
+    CHECK(NSEdgeInsetsEqual([scroll contentInsets], insets) && NSEdgeInsetsEqual([scroll scrollerInsets], insets));
+    CHECK(![scroll automaticallyAdjustsContentInsets]);
+    NSClipView *clip = [scroll contentView]; [clip setContentInsets:insets]; [clip setAutomaticallyAdjustsContentInsets:NO];
+    CHECK(NSEdgeInsetsEqual([clip contentInsets], insets) && ![clip automaticallyAdjustsContentInsets]);
+    NSView *document = [[[NSView alloc] initWithFrame:NSMakeRect(0,0,300,300)] autorelease]; [clip setDocumentView:document];
+    CHECK([clip documentRect].size.width >= 300);
+    CHECK([clip constrainBoundsRect:NSMakeRect(-10,-20,50,50)].origin.x == 0);
+    [clip setDocumentCursor:[NSCursor arrowCursor]]; CHECK([clip documentCursor] == [NSCursor arrowCursor]);
+    NSScroller *scroller = [[[NSScroller alloc] initWithFrame:NSMakeRect(0,0,15,100)] autorelease];
+    [scroller setKnobStyle:NSScrollerKnobStyleDark]; [scroller setControlTint:NSGraphiteControlTint];
+    CHECK([scroller knobStyle] == NSScrollerKnobStyleDark && [scroller controlTint] == NSGraphiteControlTint);
+    CHECK([NSScroller scrollerWidthForControlSize:NSSmallControlSize scrollerStyle:NSScrollerStyleOverlay] > 0);
+    CHECK([NSScroller isCompatibleWithOverlayScrollers]);
+    NSTableCellView *cell = [[[NSTableCellView alloc] initWithFrame:NSZeroRect] autorelease];
+    [cell setBackgroundStyle:NSBackgroundStyleDark]; [cell setRowSizeStyle:NSTableViewRowSizeStyleLarge];
+    CHECK([cell backgroundStyle] == NSBackgroundStyleDark && [cell rowSizeStyle] == NSTableViewRowSizeStyleLarge);
+    NSTableColumn *column = [[[NSTableColumn alloc] initWithIdentifier:@"test"] autorelease];
+    [column setTitle:@"Title"]; CHECK([[column title] isEqual:@"Title"]); [column sizeToFit]; CHECK([column width] >= [column minWidth]);
+    NSTabView *tabs = [[[NSTabView alloc] initWithFrame:NSZeroRect] autorelease];
+    [tabs setControlSize:NSSmallControlSize]; CHECK([tabs controlSize] == NSSmallControlSize);
+    for (NSString *name in @[@"one", @"two"]) [tabs addTabViewItem:[[[NSTabViewItem alloc] initWithIdentifier:name] autorelease]];
+    [tabs selectTabViewItemAtIndex:0]; [tabs selectNextTabViewItem:nil]; CHECK([tabs selectedTabViewItem] == [tabs tabViewItemAtIndex:1]);
+    [tabs selectPreviousTabViewItem:nil]; CHECK([tabs selectedTabViewItem] == [tabs tabViewItemAtIndex:0]);
+    NSToolbar *toolbar = [[[NSToolbar alloc] initWithIdentifier:@"toolbar"] autorelease]; [toolbar setAllowsExtensionItems:YES]; CHECK([toolbar allowsExtensionItems]);
+    NSToolbarItem *item = [[[NSToolbarItem alloc] initWithItemIdentifier:@"item"] autorelease]; [item setBordered:YES]; [item setNavigational:YES]; CHECK([item isBordered] && [item isNavigational]);
+    NSMenu *menu = [[[NSMenu alloc] initWithTitle:@"menu"] autorelease];
+    [menu setMinimumWidth:123]; [menu setFont:[NSFont systemFontOfSize:13]]; [menu setAllowsContextMenuPlugIns:NO];
+    CHECK([menu minimumWidth] == 123 && [[menu font] pointSize] == 13 && ![menu allowsContextMenuPlugIns]);
+    NSImage *image = [[[NSImage alloc] initWithSize:NSMakeSize(20,30)] autorelease];
+    CHECK(NSEqualRects([image alignmentRect],NSMakeRect(0,0,20,30)));
+    [image setAlignmentRect:NSMakeRect(1,2,3,4)]; [image setCapInsets:insets];
+    CHECK(NSEqualRects([image alignmentRect],NSMakeRect(1,2,3,4)) && NSEdgeInsetsEqual([image capInsets],insets));
+    NSImageView *imageView = [[[NSImageView alloc] initWithFrame:NSZeroRect] autorelease];
+    [imageView setContentTintColor:[NSColor redColor]]; CHECK([[imageView contentTintColor] isEqual:[NSColor redColor]]);
+    NSOpenPanel *panel = [NSOpenPanel openPanel]; [panel setCanDownloadUbiquitousContents:NO]; [panel setCanResolveUbiquitousConflicts:NO];
+    CHECK(![panel canDownloadUbiquitousContents] && ![panel canResolveUbiquitousConflicts]);
+    [panel setCanCreateDirectories:NO]; [panel setAllowsOtherFileTypes:YES]; CHECK(![panel canCreateDirectories] && [panel allowsOtherFileTypes]);
+    [panel validateVisibleColumns]; CHECK([panel isExpanded]);
+    OSXERAPILoadController *parent = [[[OSXERAPILoadController alloc] initWithNibName:nil bundle:nil] autorelease];
+    NSViewController *child = [[[NSViewController alloc] initWithNibName:nil bundle:nil] autorelease];
+    [parent addChildViewController:child]; CHECK([child parentViewController] == parent && [[parent childViewControllers] count] == 1);
+    BOOL raised = NO; @try { [child addChildViewController:parent]; } @catch (NSException *e) { raised = YES; } CHECK(raised);
+    [child removeFromParentViewController]; CHECK(![child parentViewController] && ![[parent childViewControllers] count]);
+    [parent setPreferredContentSize:NSMakeSize(10,20)]; CHECK(NSEqualSizes([parent preferredContentSize],NSMakeSize(10,20)));
+    [parent view]; [parent view]; CHECK(parent->loads == 1);
+    NSWindow *window = [[[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,100,100) styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:YES] autorelease];
+    [window setReleasedWhenClosed:NO]; [window setContentViewController:parent];
+    CHECK([window contentViewController] == parent && [window contentView] == [parent view]);
+    [window setMovable:NO]; CHECK(![window isMovable]); [window setContentMinSize:NSMakeSize(20,30)]; CHECK([window minSize].height >= 30);
+    [window setBackingType:NSBackingStoreBuffered]; CHECK([window backingType] == NSBackingStoreBuffered);
+    CAMediaTimingFunction *timing = [NSClassFromString(@"CAMediaTimingFunction") functionWithControlPoints:0.5 :0 :1 :1];
+    CHECK(timing != nil);
+    [NSAnimationContext beginGrouping]; [[NSAnimationContext currentContext] setTimingFunction:timing];
+    [NSAnimationContext beginGrouping]; CHECK([[NSAnimationContext currentContext] timingFunction] == timing);
+    [NSAnimationContext endGrouping]; [NSAnimationContext endGrouping];
+}
+
+static void publicAPIAudit(void) {
+    NSView *parent = [[[NSView alloc] initWithFrame:NSMakeRect(0,0,400,300)] autorelease];
+    NSView *a = [[[NSView alloc] initWithFrame:NSMakeRect(10,20,100,80)] autorelease];
+    NSView *b = [[[NSView alloc] initWithFrame:NSMakeRect(150,20,100,80)] autorelease];
+    [parent addSubview:a]; [parent addSubview:b];
+    CHECK([a ancestorSharedWithView:b] == parent && [a ancestorSharedWithView:a] == a);
+    CHECK([a leadingAnchor] == [a leadingAnchor]);
+    CHECK([[a widthAnchor] isKindOfClass:[NSLayoutDimension class]]);
+    CHECK([[a firstBaselineAnchor] isKindOfClass:[NSLayoutYAxisAnchor class]]);
+    NSLayoutConstraint *c = [[a leadingAnchor] constraintEqualToAnchor:[b trailingAnchor] constant:7];
+    CHECK([c firstItem] == a && [c secondItem] == b && [c firstAttribute] == NSLayoutAttributeLeading);
+    CHECK([c secondAttribute] == NSLayoutAttributeTrailing && [c constant] == 7 && [c multiplier] == 1);
+    CHECK(![c isActive]); [c setActive:YES]; CHECK([[parent constraints] containsObject:c]);
+    CHECK([[a constraintsAffectingLayoutForOrientation:NSLayoutConstraintOrientationHorizontal] containsObject:c]);
+    [c setActive:NO];
+    c = [[a widthAnchor] constraintGreaterThanOrEqualToAnchor:[b heightAnchor] multiplier:2 constant:3];
+    CHECK([c multiplier] == 2 && [c constant] == 3 && [c relation] == NSLayoutRelationGreaterThanOrEqual);
+    c = [[a heightAnchor] constraintLessThanOrEqualToConstant:100];
+    CHECK([c secondItem] == nil && [c secondAttribute] == NSLayoutAttributeNotAnAttribute && [c constant] == 100);
+    c = [[a widthAnchor] constraintEqualToConstant:25]; CHECK([c relation] == NSLayoutRelationEqual);
+    c = [[a heightAnchor] constraintGreaterThanOrEqualToConstant:1]; CHECK([c relation] == NSLayoutRelationGreaterThanOrEqual);
+    c = [[a topAnchor] constraintLessThanOrEqualToAnchor:[b bottomAnchor]]; CHECK([c constant] == 0);
+    BOOL raised = NO;
+    @try { [[a leadingAnchor] constraintEqualToAnchor:(id)[b topAnchor]]; } @catch (NSException *e) { raised = YES; }
+    CHECK(raised); raised = NO;
+    @try { [[a leadingAnchor] constraintEqualToAnchor:[b leftAnchor]]; } @catch (NSException *e) { raised = YES; }
+    CHECK(raised); raised = NO;
+    @try { [[a widthAnchor] constraintEqualToAnchor:nil]; } @catch (NSException *e) { raised = YES; }
+    CHECK(raised);
+    NSLayoutGuide *guide = [[[NSLayoutGuide alloc] init] autorelease]; [parent addLayoutGuide:guide];
+    c = [[guide widthAnchor] constraintEqualToAnchor:[a widthAnchor]];
+    CHECK([c firstItem] == guide); [c setActive:YES]; CHECK([[parent constraints] containsObject:c]); [c setActive:NO];
+    CHECK([[a safeAreaLayoutGuide] owningView] == a);
+    CHECK(NSEqualRects([[a safeAreaLayoutGuide] frame], [a safeAreaRect]));
+    NSView *temporary = [[NSView alloc] initWithFrame:NSZeroRect];
+    NSLayoutAnchor *orphan = [[temporary widthAnchor] retain]; [temporary release];
+    CHECK([orphan item] == nil); [orphan release];
+    CHECK(NSEdgeInsetsEqual([a safeAreaInsets], NSEdgeInsetsZero));
+    [a setUserInterfaceLayoutDirection:NSUserInterfaceLayoutDirectionRightToLeft];
+    CHECK([a userInterfaceLayoutDirection] == NSUserInterfaceLayoutDirectionRightToLeft);
+    [a setNeedsUpdateConstraints:YES]; [parent updateConstraintsForSubtreeIfNeeded]; CHECK(![a needsUpdateConstraints]);
+    CHECK(![a wantsUpdateLayer]); [a updateLayer]; [a prepareForReuse];
+    NSRect aligned = [a backingAlignedRect:NSMakeRect(0.2,0.3,10.2,10.3) options:NSAlignAllEdgesOutward];
+    CHECK(NSEqualRects(aligned, NSMakeRect(0,0,11,11)));
+    NSWindow *window = [[[NSWindow alloc] initWithContentRect:NSMakeRect(10,10,400,300)
+        styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:YES] autorelease];
+    [window setReleasedWhenClosed:NO]; [window setContentView:parent];
+    NSRect rect = NSMakeRect(1,2,3,4);
+    CHECK(NSEqualRects([a convertRectFromBacking:[a convertRectToBacking:rect]],rect));
+    CHECK(NSEqualRects([window convertRectFromBacking:[window convertRectToBacking:rect]],rect));
+    CHECK([a effectiveAppearance] != nil);
+    NSMutableString *label = [NSMutableString stringWithString:@"accessible"];
+    [a setAccessibilityLabel:label]; [label appendString:@" changed"];
+    CHECK([[a accessibilityLabel] isEqual:@"accessible"]);
+    [a setAccessibilityIdentifier:@"id"]; [a setAccessibilityValue:@42]; [a setAccessibilityElement:YES];
+    [a setAccessibilityFrame:rect]; [a setAccessibilitySelectedTextRange:NSMakeRange(2,3)];
+    CHECK([[a accessibilityIdentifier] isEqual:@"id"] && [[a accessibilityValue] intValue] == 42);
+    CHECK([a isAccessibilityElement] && NSEqualRects([a accessibilityFrame], rect));
+    CHECK(NSEqualRanges([a accessibilitySelectedTextRange], NSMakeRange(2,3)));
+    [a setAccessibilityLabel:nil]; CHECK(![a accessibilityLabel]);
+    NSMenuItem *menuItem = [[[NSMenuItem alloc] initWithTitle:@"item" action:NULL keyEquivalent:@""] autorelease];
+    [menuItem setAccessibilityLabel:@"menu item"]; CHECK([[menuItem accessibilityLabel] isEqual:@"menu item"]);
+    [window setAccessibilityIdentifier:@"window"]; CHECK([[window accessibilityIdentifier] isEqual:@"window"]);
+
+    OSXERAPIRows *source = [[[OSXERAPIRows alloc] init] autorelease];
+    NSTableView *table = [[[NSTableView alloc] initWithFrame:NSMakeRect(0,0,200,200)] autorelease];
+    [table addTableColumn:[[[NSTableColumn alloc] initWithIdentifier:@"column"] autorelease]];
+    [table setDataSource:source]; [table setDelegate:source]; [table setAllowsEmptySelection:YES];
+    [table reloadData]; CHECK([table numberOfRows] == 3);
+    [table setFloatsGroupRows:NO]; [table setAllowsTypeSelect:NO]; [table setUsesStaticContents:YES];
+    [table setVerticalMotionCanBeginDrag:NO]; [table setRowSizeStyle:NSTableViewRowSizeStyleLarge];
+    [table setColumnAutoresizingStyle:NSTableViewUniformColumnAutoresizingStyle];
+    [table setDraggingDestinationFeedbackStyle:NSTableViewDraggingDestinationFeedbackStyleSourceList];
+    CHECK(![table floatsGroupRows] && ![table allowsTypeSelect] && [table usesStaticContents]);
+    CHECK(![table verticalMotionCanBeginDrag] && [table effectiveRowSizeStyle] == NSTableViewRowSizeStyleLarge);
+    CHECK([table columnAutoresizingStyle] == NSTableViewUniformColumnAutoresizingStyle);
+    CHECK([table draggingDestinationFeedbackStyle] == NSTableViewDraggingDestinationFeedbackStyleSourceList);
+    [table setAutosaveName:@"api-test"]; [table setAutosaveTableColumns:YES];
+    [table setHeaderView:nil]; [table setCornerView:nil];
+    NSTableView *roundTrip = [NSKeyedUnarchiver unarchiveObjectWithData:[NSKeyedArchiver archivedDataWithRootObject:table]];
+    CHECK(![roundTrip floatsGroupRows] && [roundTrip rowSizeStyle] == NSTableViewRowSizeStyleLarge);
+    CHECK([[roundTrip autosaveName] isEqual:@"api-test"] && [roundTrip autosaveTableColumns]);
+    [table selectRowIndexes:[NSIndexSet indexSetWithIndex:1] byExtendingSelection:NO];
+    NSTableRowView *row = [table rowViewAtRow:1 makeIfNecessary:YES]; CHECK(row && [row isSelected]);
+    CHECK([row numberOfColumns] == 1 && [table rowForView:row] == 1);
+    __block NSInteger available = 0;
+    [table enumerateAvailableRowViewsUsingBlock:^(NSTableRowView *view, NSInteger index) { CHECK(view != nil); ++available; }];
+    CHECK(available > 0);
+    [source->items insertObject:@"inserted" atIndex:0];
+    [table beginUpdates]; [table insertRowsAtIndexes:[NSIndexSet indexSetWithIndex:0] withAnimation:NSTableViewAnimationEffectFade]; [table endUpdates];
+    CHECK([table numberOfRows] == 4 && [table selectedRow] == 2);
+    CHECK([table rowViewAtRow:2 makeIfNecessary:YES] == row);
+    id moved = [[source->items objectAtIndex:2] retain]; [source->items removeObjectAtIndex:2];
+    [source->items insertObject:moved atIndex:0]; [moved release]; [table moveRowAtIndex:2 toIndex:0];
+    CHECK([table selectedRow] == 0);
+    [source->items removeObjectAtIndex:3]; [table removeRowsAtIndexes:[NSIndexSet indexSetWithIndex:3] withAnimation:0];
+    if (!([table numberOfRows] == 3 && [table selectedRow] == 0))
+        fprintf(stderr, "after remove: rows=%ld selected=%ld\n", (long)[table numberOfRows], (long)[table selectedRow]);
+    CHECK([table numberOfRows] == 3 && [table selectedRow] == 0);
+    [table hideRowsAtIndexes:[NSIndexSet indexSetWithIndex:0] withAnimation:0];
+    CHECK([[table hiddenRowIndexes] containsIndex:0] && [table rectOfRow:0].size.height == 0);
+    CHECK([table selectedRow] == 0 && [table rowViewAtRow:0 makeIfNecessary:NO] == nil && source->removed > 0);
+    [table unhideRowsAtIndexes:[NSIndexSet indexSetWithIndex:0] withAnimation:0];
+    CHECK(![[table hiddenRowIndexes] count] && [table rectOfRow:0].size.height > 0);
+    raised = NO; @try { [table rowViewAtRow:20 makeIfNecessary:YES]; } @catch (NSException *e) { raised = YES; } CHECK(raised);
+    raised = NO; @try { [table endUpdates]; } @catch (NSException *e) { raised = YES; } CHECK(raised);
+    [table setDropRow:0 dropOperation:NSTableViewDropOn];
+    [row setGroupRowStyle:YES]; [row setFloating:YES]; [row setEmphasized:NO];
+    [row setTargetForDropOperation:YES]; [row setPreviousRowSelected:YES]; [row setNextRowSelected:YES];
+    [row setIndentationForDropOperation:12]; [row setBackgroundColor:[NSColor redColor]];
+    CHECK([row isGroupRowStyle] && [row isFloating] && ![row isEmphasized] && [row isTargetForDropOperation]);
+    CHECK([row isPreviousRowSelected] && [row isNextRowSelected] && [row indentationForDropOperation] == 12);
+    CHECK([[row backgroundColor] isEqual:[NSColor redColor]]); // colors are not guaranteed to be shared instances
+
+    NSOutlineView *outline = [[[NSOutlineView alloc] initWithFrame:NSMakeRect(0,0,200,200)] autorelease];
+    [outline setAllowsEmptySelection:YES]; [outline setDataSource:source]; [outline reloadData];
+    CHECK([outline stronglyReferencesItems] && [outline numberOfRows] == 3);
+    CHECK([outline childIndexForItem:[source->items objectAtIndex:1]] == 1);
+    CHECK([outline rowForItem:@"absent"] == -1 && [outline itemAtRow:99] == nil);
+    [outline selectRowIndexes:[NSIndexSet indexSetWithIndex:1] byExtendingSelection:NO];
+    [source->items insertObject:@"outline inserted" atIndex:0];
+    [outline insertItemsAtIndexes:[NSIndexSet indexSetWithIndex:0] inParent:nil withAnimation:0];
+    CHECK([outline numberOfRows] == 4 && [outline selectedRow] == 2);
+    [source->items removeObjectAtIndex:0];
+    [outline removeItemsAtIndexes:[NSIndexSet indexSetWithIndex:0] inParent:nil withAnimation:0];
+    CHECK([outline numberOfRows] == 3 && [outline selectedRow] == 1);
+    [outline setStronglyReferencesItems:NO]; CHECK(![outline stronglyReferencesItems]);
+    [outline setDropItem:[source->items objectAtIndex:0] dropChildIndex:-1];
+}
+
 int main(int argc, char **argv) {
     CHECK(argc == 3);
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
@@ -656,5 +918,6 @@ int main(int argc, char **argv) {
     [NSApplication sharedApplication];
     runtimeState(); foundation(directory); sharedAppKit(directory); layoutAndAnimation(); otherMethods(directory); additionalMethods();
     viewTables([NSString stringWithUTF8String:argv[2]]); stackFrames(); sheetCompletions(); secureEntries(); sharedRoundTwo(directory);
-    [pool drain]; puts("PASS appkit-gaps round2"); return 0;
+    publicAPIAudit(); publicAPIProperties();
+    [pool drain]; puts("PASS appkit-gaps API"); return 0;
 }
