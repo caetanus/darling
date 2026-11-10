@@ -7,4 +7,5 @@ source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 case "$OSXER_TEST_WORKDIR" in /tmp|/tmp/*|/private/tmp|/private/tmp/*) exit 1;; esac
 scratch=$(mktemp -d "$OSXER_TEST_WORKDIR/appkit-gaps.XXXXXX")
 trap 'rm -r -- "$scratch"' EXIT
-"$source_dir/probe" "$scratch"
+# OSXER APPKIT (round 2): fixture data is generated during the host cross-build.
+"$source_dir/probe" "$scratch" "$source_dir/fixtures"

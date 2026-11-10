@@ -241,49 +241,25 @@ LSGetApplicationForInfo(
 	return retval;
 }
 
-CFURLRef LSCopyDefaultApplicationURLForContentType(CFStringRef inContentType, LSRolesMask inRoleMask, CFErrorRef  _Nullable *outError)
+// OSXER APPKIT (default application consistency): the role-handler API owns
+// both user overrides and declared fallbacks. Resolve its bundle through the
+// same registration database used by the other application lookup APIs.
+CFURLRef LSCopyDefaultApplicationURLForContentType(CFStringRef type, LSRolesMask roles, CFErrorRef *outError)
 {
-	__block CFURLRef retval;
-	FMDatabaseQueue* dq = getDatabaseQueue();
-
-	if (dq == nil)
-	{
-		if (outError)
-			*outError = CFErrorCreate(NULL, kCFErrorDomainOSStatus, fnfErr, NULL);
-		return NULL;
-	}
-
-	[dq inDatabase:^(FMDatabase* db) {
-		NSString* query = @"select path, AD.rank from bundle INNER JOIN app_doc AD on AD.bundle=bundle.id LEFT JOIN app_doc_uti AU on AU.doc=AD.id WHERE bundle.package_type='APPL' AND uti=?";
-
-		if (inRoleMask != kLSRolesAll)
-		{
-			query = [query stringByAppendingFormat:@" and AD.role in (%@)", roleSQLArray(inRoleMask)];
-		}
-
-		query = [query stringByAppendingString:@" order by case "
-			@"when AD.rank='Owner' then 1 "
-			@"when AD.rank='Default' then 2 "
-			@"when AD.rank='Alternate' then 3 "
-			@"else 5 "
-			@"end asc"];
-
-		FMResultSet* rs = [db executeQuery:query, inContentType];
-
-		if ([rs next])
-		{
-			retval = (CFURLRef) [[NSURL alloc] initFileURLWithPath: [rs stringForColumn:@"path"] isDirectory: YES];
-		}
-		else
-		{
-			if (outError)
-				*outError = CFErrorCreate(NULL, kCFErrorDomainOSStatus, kLSApplicationNotFoundErr, NULL);
-			retval = NULL;
-		}
-		[rs close];
-	}];
-
-	return retval;
+    if (outError) *outError = NULL;
+    CFURLRef result = NULL;
+    OSStatus status = paramErr;
+    if (type != NULL) {
+        CFStringRef identifier = LSCopyDefaultRoleHandlerForContentType(type, roles);
+        status = kLSApplicationNotFoundErr;
+        if (identifier != NULL) {
+            status = LSFindApplicationForInfo(kLSUnknownCreator, identifier, NULL, NULL, &result);
+            CFRelease(identifier);
+        }
+    }
+    if (status != noErr && outError)
+        *outError = CFErrorCreate(NULL, kCFErrorDomainOSStatus, status, NULL);
+    return result;
 }
 
 CFURLRef LSCopyDefaultApplicationURLForURL(CFURLRef inURL, LSRolesMask inRoleMask, CFErrorRef  _Nullable *outError)
