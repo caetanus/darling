@@ -42,6 +42,9 @@ Module.symvers
 # OSXER PREFIX (regression): keep the native prefix setup tests visible.
 !/tests/startup/
 !/tests/startup/**
+# OSXER APPS (regression): include the API probes and their script runners.
+!/tests/app-gaps/
+!/tests/app-gaps/**
 
 # The suggested build folder
 build

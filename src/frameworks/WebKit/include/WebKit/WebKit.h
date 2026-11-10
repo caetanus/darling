@@ -22,6 +22,8 @@
 #define _WebKit_H_
 
 #import <Foundation/Foundation.h>
+// OSXER APPS (WebArchive)
+#import <WebKit/WebArchive.h>
 
 #import <WebKit/CAAnimationDelegate.h>
 #import <WebKit/NSCandidateListTouchBarItemDelegate.h>

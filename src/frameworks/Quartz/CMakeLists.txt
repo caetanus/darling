@@ -10,6 +10,8 @@ append_path_sdk_subframework(${quartz_sdk_path} quartz_sdk_path Quartz
 )
 
 add_subdirectory(ImageKit)
+# OSXER APPS (QuickLookUI framework)
+add_subdirectory(QuickLookUI)
 add_subdirectory(QuartzComposer)
 add_subdirectory(QuartzFilters)
 
@@ -32,8 +34,6 @@ add_framework(Quartz
 
 	SOURCES
 		src/Quartz.c
-		QuickLookUI/src/QLPreviewPanel.m
-		QuickLookUI/src/QLPreviewView.m
 
 	DEPENDENCIES
 		system
@@ -41,6 +41,7 @@ add_framework(Quartz
 		Foundation
 		AppKit
 		QuickLook
+		QuickLookUI
 		ImageKit
 )
 
@@ -55,7 +56,8 @@ else()
 	set(QuartzCore_BUILD ${CMAKE_BINARY_DIR}/src/frameworks/dev-stubs/QuartzCore/QuartzCore)
 endif()
 
-# Ideally would be done through a nested QuickLookUI framework
+# OSXER APPS (QuickLookUI): preserve Quartz umbrella exports.
+reexport(Quartz QuickLookUI ${CMAKE_CURRENT_BINARY_DIR}/QuickLookUI/QuickLookUI)
 reexport(Quartz QuickLook ${QuickLook_BUILD})
 reexport(Quartz ImageKit ${ImageKit_BUILD})
 reexport(Quartz QuartzComposer ${QuartzComposer_BUILD})

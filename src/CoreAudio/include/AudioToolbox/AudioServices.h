@@ -39,3 +39,15 @@ extern void AudioServicesPlaySystemSound(SystemSoundID inSystemSoundID);
 #endif
 
 #endif
+
+// OSXER APPS (alert audio)
+#ifdef __cplusplus
+extern "C" {
+#endif
+void AudioServicesPlayAlertSound(SystemSoundID sound);
+#if defined(__BLOCKS__)
+void AudioServicesPlayAlertSoundWithCompletion(SystemSoundID sound, void (^completion)(void));
+#endif
+#ifdef __cplusplus
+}
+#endif

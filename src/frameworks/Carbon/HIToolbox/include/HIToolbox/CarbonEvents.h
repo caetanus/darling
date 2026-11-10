@@ -44,6 +44,11 @@ void RunApplicationEventLoop(void);
 OSStatus RegisterEventHotKey(UInt32 inHotKeyCode, UInt32 inHotKeyModifiers, EventHotKeyID inHotKeyID, EventTargetRef inTarget, OptionBits inOptions, EventHotKeyRef *outRef);
 OSStatus UnregisterEventHotKey(EventHotKeyRef inHotKey);
 
+/* OSXER APPS (symbolic hot keys) */
+#include <CoreFoundation/CFArray.h>
+OSStatus CopySymbolicHotKeys(CFArrayRef *keys);
+void *PushSymbolicHotKeyMode(OptionBits options);
+void PopSymbolicHotKeyMode(void *token);
 OSStatus EnableSecureEventInput(void);
 OSStatus DisableSecureEventInput(void);
 Boolean IsSecureEventInputEnabled(void);

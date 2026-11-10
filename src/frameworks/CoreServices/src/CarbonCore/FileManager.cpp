@@ -36,6 +36,9 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 #include <regex.h>
 #include <fcntl.h>
 #include <vector>
+#include <copyfile.h>
+#include <sys/xattr.h>
+#include <darling/osxer-apps.h>
 #include <CarbonCore/DateTimeUtils.h>
 #include <errno.h>
 #include <darling/emulation/linux_premigration/ext/file_handle.h>
@@ -171,133 +174,157 @@ OSStatus FSRefMakePath(const FSRef* fsref, uint8_t* path, uint32_t maxSize)
 	return noErr;
 }
 
-OSStatus FSGetCatalogInfo(const FSRef* ref, uint32_t infoBits, FSCatalogInfo* infoOut, HFSUniStr255* nameOut, FSSpecPtr fsspec, FSRef* parentDir)
+// OSXER APPS (catalog): path resolution stays in the existing FSRef backend.
+OSStatus FSGetCatalogInfo(const FSRef* ref, uint32_t infoBits, FSCatalogInfo* infoOut,
+    HFSUniStr255* nameOut, FSSpecPtr fsspec, FSRef* parentDir)
 {
-	std::string path;
-
-	if (!FSRefMakePath(ref, path))
-		return fnfErr;
-
-	if (nameOut)
-	{
-		CFStringRef cfstr = CFStringCreateWithCString(NULL, path.c_str(), kCFStringEncodingUTF8);
-		nameOut->length = std::min<size_t>(path.length(), 255);
-		CFStringGetCharacters(cfstr, CFRangeMake(0, nameOut->length), nameOut->unicode);
-		CFRelease(cfstr);
-	}
-
-	if (parentDir)
-	{
-		/*
-		memcpy(parentDir, ref, sizeof(FSRef));
-		ino_t* last = std::find(parentDir->inodes, parentDir->inodes+FSRef_MAX_DEPTH, 0);
-
-		if (last != parentDir->inodes)
-			*(last-1) = 0;
-		*/
-		// TODO
-	}
-
-	if (infoOut && infoBits != kFSCatInfoNone)
-	{
-		struct stat st;
-
-		memset(infoOut, 0, sizeof(*infoOut));
-
-		if (::stat(path.c_str(), &st) != 0)
-			return makeOSStatus(errno);
-
-		if (infoBits & kFSCatInfoNodeFlags)
-		{
-			if (S_ISDIR(st.st_mode))
-				infoOut->nodeFlags = 4;
-		}
-	
-		if (infoBits & (kFSCatInfoParentDirID|kFSCatInfoNodeID))
-		{
-			/*
-			if (infoBits & kFSCatInfoNodeID)
-				infoOut->nodeID = ref->inodes[0];
-			for (int i = FSRef_MAX_DEPTH-1; i > 0; i--)
-			{
-				if (ref->inodes[i] == 0)
-					continue;
-				
-				if (infoBits & kFSCatInfoParentDirID)
-					infoOut->parentDirID = ref->inodes[i-1];
-				if (infoBits & kFSCatInfoNodeID)
-					infoOut->nodeID = ref->inodes[i];
-			}
-			*/
-			// TODO
-		}
-
-		if (infoBits & kFSCatInfoDataSizes)
-		{
-			infoOut->dataLogicalSize = st.st_size;
-			infoOut->dataPhysicalSize = st.st_blocks*512;
-		}
-		
-		int uaccess;
-		
-		if (st.st_uid == getuid())
-			uaccess = st.st_mode & 0700;
-		else if (hasgid(st.st_gid))
-			uaccess = st.st_mode & 070;
-		else
-			uaccess = st.st_mode & 07;
-
-		if (infoBits & kFSCatInfoPermissions)
-		{
-			const uid_t uid = getuid();
-
-			infoOut->fsPermissionInfo.userID = st.st_uid;
-			infoOut->fsPermissionInfo.groupID = st.st_gid;
-			infoOut->fsPermissionInfo.mode = st.st_mode & 07777;
-			infoOut->fsPermissionInfo.userAccess = uaccess;
-		}
-
-		if (infoBits & kFSCatInfoUserPrivs)
-		{
-			if (!(uaccess & 2))
-				infoOut->userPrivileges |= 0x4; // kioACUserNoMakeChangesMask
-			if (getuid() != st.st_uid)
-				infoOut->userPrivileges |= 0x80; // kioACUserNotOwnerMask
-		}
-		if (infoBits & kFSCatInfoCreateDate)
-			infoOut->createDate = Darling::time_tToUTC(st.st_ctime);
-		if (infoBits & kFSCatInfoContentMod)
-			infoOut->attributeModDate = infoOut->contentModDate = Darling::time_tToUTC(st.st_mtime);
-		if (infoBits & kFSCatInfoAccessDate)
-			infoOut->accessDate = Darling::time_tToUTC(st.st_atime);
-	}
-
-	return noErr;
+    if (!ref || (infoBits && !infoOut)) return paramErr;
+    if (fsspec) {
+        OSXER_APPS_STUB("legacy FSSpec output unavailable");
+        return unimpErr;
+    }
+    const uint32_t supported = kFSCatInfoNodeFlags | kFSCatInfoNodeID |
+        kFSCatInfoParentDirID | kFSCatInfoCreateDate | kFSCatInfoContentMod |
+        kFSCatInfoAttrMod | kFSCatInfoAccessDate | kFSCatInfoPermissions |
+        kFSCatInfoUserAccess | kFSCatInfoUserPrivs | kFSCatInfoDataSizes |
+        kFSCatInfoRsrcSizes | kFSCatInfoFinderInfo | kFSCatInfoFinderXInfo |
+        kFSCatInfoValence;
+    if (infoBits & ~supported) {
+        OSXER_APPS_STUB("requested catalog fields unavailable");
+        return unimpErr;
+    }
+    std::string path;
+    if (!FSRefMakePath(ref, path)) return fnfErr;
+    struct stat st;
+    if (lstat(path.c_str(), &st) != 0) return makeOSStatus(errno);
+    auto slash = path.find_last_of('/');
+    std::string parent = slash == 0 ? "/" : path.substr(0, slash);
+    std::string leaf = path == "/" ? "/" : path.substr(slash + 1);
+    if (nameOut) {
+        CFStringRef name = CFStringCreateWithCString(NULL, leaf.c_str(), kCFStringEncodingUTF8);
+        if (!name) return bdNamErr;
+        CFIndex length = CFStringGetLength(name);
+        if (length > 255) { CFRelease(name); return errFSNameTooLong; }
+        nameOut->length = length;
+        CFStringGetCharacters(name, CFRangeMake(0, length), nameOut->unicode);
+        CFRelease(name);
+    }
+    if (parentDir) {
+        OSStatus result = FSPathMakeRef((const UInt8*)parent.c_str(), parentDir, NULL);
+        if (result) return result;
+    }
+    if (!infoOut || !infoBits) return noErr;
+    memset(infoOut, 0, sizeof(*infoOut));
+    if (infoBits & kFSCatInfoNodeFlags) infoOut->nodeFlags = S_ISDIR(st.st_mode) ? 4 : 0;
+    if (infoBits & kFSCatInfoNodeID) infoOut->nodeID = st.st_ino;
+    if (infoBits & kFSCatInfoParentDirID) {
+        struct stat pst;
+        if (stat(parent.c_str(), &pst)) return makeOSStatus(errno);
+        infoOut->parentDirID = pst.st_ino;
+    }
+    if (infoBits & kFSCatInfoDataSizes) {
+        infoOut->dataLogicalSize = st.st_size;
+        infoOut->dataPhysicalSize = st.st_blocks * 512;
+    }
+    if (infoBits & kFSCatInfoRsrcSizes) {
+        ssize_t length = getxattr(path.c_str(), "com.apple.ResourceFork", NULL, 0, 0, XATTR_NOFOLLOW);
+        if (length < 0 && errno != ENOATTR && errno != ENOTSUP) return makeOSStatus(errno);
+        infoOut->rsrcLogicalSize = infoOut->rsrcPhysicalSize = length < 0 ? 0 : length;
+    }
+    if (infoBits & (kFSCatInfoFinderInfo | kFSCatInfoFinderXInfo)) {
+        unsigned char finder[32] = {};
+        ssize_t length = getxattr(path.c_str(), "com.apple.FinderInfo", finder, sizeof(finder), 0, XATTR_NOFOLLOW);
+        if (length < 0 && errno != ENOATTR && errno != ENOTSUP) return makeOSStatus(errno);
+        if (infoBits & kFSCatInfoFinderInfo) memcpy(infoOut->finderInfo, finder, 16);
+        if (infoBits & kFSCatInfoFinderXInfo) memcpy(infoOut->extFinderInfo, finder + 16, 16);
+    }
+    int access = st.st_uid == geteuid() ? (st.st_mode >> 6) & 7 :
+        hasgid(st.st_gid) ? (st.st_mode >> 3) & 7 : st.st_mode & 7;
+    if (infoBits & (kFSCatInfoPermissions | kFSCatInfoUserAccess)) {
+        infoOut->fsPermissionInfo.userID = st.st_uid;
+        infoOut->fsPermissionInfo.groupID = st.st_gid;
+        infoOut->fsPermissionInfo.mode = st.st_mode & 07777;
+        infoOut->fsPermissionInfo.userAccess = access;
+    }
+    if (infoBits & kFSCatInfoUserPrivs) {
+        if (!(access & 2)) infoOut->userPrivileges |= 4;
+        if (geteuid() != st.st_uid) infoOut->userPrivileges |= 0x80;
+    }
+    if (infoBits & kFSCatInfoCreateDate) infoOut->createDate = Darling::time_tToUTC(st.st_birthtime);
+    if (infoBits & kFSCatInfoContentMod) infoOut->contentModDate = Darling::time_tToUTC(st.st_mtime);
+    if (infoBits & kFSCatInfoAttrMod) infoOut->attributeModDate = Darling::time_tToUTC(st.st_ctime);
+    if (infoBits & kFSCatInfoAccessDate) infoOut->accessDate = Darling::time_tToUTC(st.st_atime);
+    if ((infoBits & kFSCatInfoValence) && S_ISDIR(st.st_mode)) {
+        DIR *dir = opendir(path.c_str());
+        if (!dir) return makeOSStatus(errno);
+        errno = 0;
+        while (struct dirent *entry = readdir(dir)) {
+            if (strcmp(entry->d_name, ".") && strcmp(entry->d_name, "..")) ++infoOut->valence;
+        }
+        int error = errno;
+        closedir(dir);
+        if (error) return makeOSStatus(error);
+    }
+    return noErr;
 }
 
+// OSXER APPS (file copy): the default operation copies data and metadata through
+// libcopyfile. Unsupported policy flags fail before any filesystem changes.
+OSStatus FSCopyObjectSync(const FSRef *source, const FSRef *destDir, CFStringRef destName,
+                         FSRef *target, OptionBits options)
+{
+    if (!source || !destDir) return paramErr;
+    if (options) { OSXER_APPS_STUB("non-default file copy options unavailable"); return unimpErr; }
+    std::string from, directory;
+    if (!FSRefMakePath(source, from) || !FSRefMakePath(destDir, directory)) return fnfErr;
+    struct stat st;
+    if (stat(directory.c_str(), &st)) return makeOSStatus(errno);
+    if (!S_ISDIR(st.st_mode)) return errFSNotAFolder;
+    std::string name = from.substr(from.find_last_of('/') + 1);
+    if (destName) {
+        CFIndex size = CFStringGetMaximumSizeForEncoding(CFStringGetLength(destName), kCFStringEncodingUTF8) + 1;
+        std::vector<char> buffer(size);
+        if (!CFStringGetCString(destName, buffer.data(), size, kCFStringEncodingUTF8)) return bdNamErr;
+        // Reject embedded NULs instead of silently shortening the requested name.
+        CFStringRef roundtrip = CFStringCreateWithCString(NULL, buffer.data(), kCFStringEncodingUTF8);
+        bool matches = roundtrip && CFEqual(roundtrip, destName);
+        if (roundtrip) CFRelease(roundtrip);
+        if (!matches) return bdNamErr;
+        name = buffer.data();
+    }
+    if (name.empty() || name == "." || name == ".." || name.find('/') != std::string::npos) return bdNamErr;
+    struct stat sourceStat;
+    if (lstat(from.c_str(), &sourceStat)) return makeOSStatus(errno);
+    if (S_ISDIR(sourceStat.st_mode)) {
+        // libcopyfile does not currently reject recursive copies into the source.
+        // Canonical directory paths catch aliases as well as direct descendants.
+        std::unique_ptr<char, decltype(&free)> realSource(realpath(from.c_str(), NULL), free);
+        std::unique_ptr<char, decltype(&free)> realDestination(realpath(directory.c_str(), NULL), free);
+        if (!realSource || !realDestination) return makeOSStatus(errno);
+        std::string base = realSource.get(), destination = realDestination.get();
+        if (destination == base || base == "/" || destination.compare(0, base.size() + 1, base + "/") == 0)
+            return paramErr;
+    }
+    std::string to = directory + "/" + name;
+    if (copyfile(from.c_str(), to.c_str(), NULL,
+        COPYFILE_ALL | COPYFILE_RECURSIVE | COPYFILE_EXCL | COPYFILE_NOFOLLOW)) return makeOSStatus(errno);
+    return target ? FSPathMakeRef((const UInt8*)to.c_str(), target, NULL) : noErr;
+}
+
+// OSXER APPS (catalog permissions): bound retries and avoid the old endless loop.
 bool hasgid(gid_t gid)
 {
-	gid_t* gids;
-	int count;
-
-	if (getegid() == gid)
-		return true;
-
-	while (true)
-	{
-		count = getgroups(0, nullptr);
-		if (count == -1 && errno == EINVAL)
-			continue;
-
-		gids = (gid_t*) alloca(sizeof(gid_t)*count);
-		if (getgroups(count, gids) != count)
-		{
-			count = 0;
-			break;
-		}
-	}
-
-	return std::find(gids, gids+count, gid) != (gids+count);
+    if (getegid() == gid) return true;
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        int count = getgroups(0, NULL);
+        if (count < 0) return false;
+        std::vector<gid_t> groups(count);
+        int actual = getgroups(count, groups.data());
+        if (actual < 0) { if (errno == EINVAL) continue; return false; }
+        if (actual > count) continue;
+        return std::find(groups.begin(), groups.begin() + actual, gid) != groups.begin() + actual;
+    }
+    return false;
 }
 
 static std::string getUserDirsConfigPath()

@@ -74,3 +74,21 @@ Boolean IsSecureEventInputEnabled(void)
 {
 	return __atomic_load_n(&g_secureEventInputCount, __ATOMIC_SEQ_CST) > 0;
 }
+
+/* OSXER APPS (symbolic hot keys): no host-wide hot-key changes. */
+#include <CoreFoundation/CFArray.h>
+#include <CarbonCore/MacErrors.h>
+#include <darling/osxer-apps.h>
+OSStatus CopySymbolicHotKeys(CFArrayRef *keys) {
+    OSXER_APPS_STUB("symbolic hot-key enumeration unavailable");
+    if (!keys) return paramErr;
+    *keys = CFArrayCreate(NULL, NULL, 0, &kCFTypeArrayCallBacks);
+    return *keys ? noErr : memFullErr;
+}
+void *PushSymbolicHotKeyMode(OptionBits options) {
+    OSXER_APPS_STUB("symbolic hot-key modes unavailable");
+    return NULL;
+}
+void PopSymbolicHotKeyMode(void *token) {
+    OSXER_APPS_STUB("symbolic hot-key modes unavailable");
+}

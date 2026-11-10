@@ -33,3 +33,6 @@ const CFStringRef kCGImagePropertyProfileName = CFSTR("ProfileName"); // guessed
 
 const CFStringRef kCGImagePropertyAPNGDelayTime = CFSTR("APNGDelayTime"); // ditto
 const CFStringRef kCGImagePropertyAPNGLoopCount = CFSTR("APNGLoopCount"); // ditto
+
+// OSXER APPS (image depth)
+const CFStringRef kCGImagePropertyDepth = CFSTR("Depth");

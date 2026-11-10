@@ -612,3 +612,46 @@ OSStatus LSCopyDisplayNameForURL(CFURLRef inURL, CFStringRef *outDisplayName)
 	*outDisplayName = (CFStringRef)[lastComp copy];
 	return noErr;
 }
+
+// OSXER APPS (handler enumeration): use the same LaunchServices registration
+// database as the single-handler APIs. An absent registry yields an owned empty array.
+CFArrayRef LSCopyApplicationURLsForURL(CFURLRef url, LSRolesMask roles)
+{
+    if (!url) return NULL;
+    NSMutableArray *results = [[NSMutableArray alloc] init];
+    FMDatabaseQueue *queue = getDatabaseQueue();
+    if (!queue) return (CFArrayRef)results;
+    [queue inDatabase:^(FMDatabase *db) {
+        NSString *query;
+        NSString *value;
+        if ([(NSURL *)url isFileURL]) {
+            value = [(NSURL *)url pathExtension];
+            query = @"select distinct bundle.path from bundle JOIN app_doc AD on AD.bundle=bundle.id "
+                @"where bundle.package_type='APPL' and (EXISTS "
+                @"(select 1 from app_doc_extension E where E.doc=AD.id and E.extension=?) "
+                @"or EXISTS (select 1 from app_doc_uti U JOIN uti on uti.type_identifier=U.uti "
+                @"JOIN uti_tag T on T.uti=uti.id where U.doc=AD.id "
+                @"and T.tag='public.filename-extension' and T.value=?))";
+            if (roles != kLSRolesAll) {
+                NSString *roleList = roleSQLArray(roles);
+                if (!roleList) return;
+                query = [query stringByAppendingFormat:@" and AD.role IN (%@)", roleList];
+            }
+        } else {
+            value = [[(NSURL *)url scheme] lowercaseString];
+            query = @"select distinct bundle.path from bundle "
+                @"JOIN bundle_url_type T on T.bundle=bundle.id "
+                @"JOIN bundle_url_type_scheme S on S.type=T.id "
+                @"where bundle.package_type='APPL' and lower(S.scheme)=?";
+        }
+        if (!value) return;
+        FMResultSet *rows = [(NSURL *)url isFileURL] ?
+            [db executeQuery:query, value, value] : [db executeQuery:query, value];
+        while ([rows next]) {
+            NSString *path = [rows stringForColumn:@"path"];
+            if (path) [results addObject:[NSURL fileURLWithPath:path isDirectory:YES]];
+        }
+        [rows close];
+    }];
+    return (CFArrayRef)results;
+}

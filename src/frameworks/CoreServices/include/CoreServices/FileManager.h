@@ -224,7 +224,11 @@ CFURLRef CFURLCreateFromFSRef(CFAllocatorRef alloc, struct FSRef* location); // 
 OSStatus FSFindFolder(long vRefNum, OSType folderType, Boolean createFolder, struct FSRef* location);
 OSStatus FSDeleteObject(const FSRef* fsref);
 
-OSStatus FSGetCatalogInfo(const FSRefPtr ref, uint32_t infoBits, struct FSCatalogInfo* infoOut, struct HFSUniStr255* nameOut, FSSpecPtr fsspec, FSRefPtr parentDir);
+// OSXER APPS (catalog ABI): const FSRef*, not the const pointer typedef.
+OSStatus FSGetCatalogInfo(const FSRef* ref, uint32_t infoBits, struct FSCatalogInfo* infoOut, struct HFSUniStr255* nameOut, FSSpecPtr fsspec, FSRefPtr parentDir);
+
+// OSXER APPS (file copy)
+OSStatus FSCopyObjectSync(const FSRef *source, const FSRef *destDir, CFStringRef destName, FSRef *target, OptionBits options);
 
 OSErr PBCreateDirectoryUnicodeSync(struct FSRefParam* paramBlock);
 OSErr PBCreateFileUnicodeSync(struct FSRefParam* paramBlock);

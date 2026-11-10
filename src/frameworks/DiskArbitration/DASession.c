@@ -182,3 +182,19 @@ void DAApprovalSessionUnscheduleFromRunLoop(DAApprovalSessionRef session,
 {
 	
 }
+
+/* OSXER APPS (disk callbacks): disk event delivery is not implemented. These
+ * registrations deliberately do not fabricate appeared/disappeared events. */
+#include <DiskArbitration/DiskArbitration.h>
+#include <darling/osxer-apps.h>
+void DARegisterDiskAppearedCallback(DASessionRef session, CFDictionaryRef match,
+    DADiskAppearedCallback callback, void *context) {
+    OSXER_APPS_STUB("disk event registration unavailable");
+}
+void DARegisterDiskDisappearedCallback(DASessionRef session, CFDictionaryRef match,
+    DADiskDisappearedCallback callback, void *context) {
+    OSXER_APPS_STUB("disk event registration unavailable");
+}
+void DAUnregisterCallback(DASessionRef session, void *callback, void *context) {
+    OSXER_APPS_STUB("disk event registration unavailable");
+}

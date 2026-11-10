@@ -44,3 +44,13 @@ void AudioServicesPlaySystemSound(SystemSoundID inSystemSoundID)
 {
     printf("STUB %s\n", __PRETTY_FUNCTION__);
 }
+
+// OSXER APPS (alert audio): no audio backend; still complete the request.
+#include <darling/osxer-apps.h>
+void AudioServicesPlayAlertSound(SystemSoundID sound) {
+    OSXER_APPS_STUB("alert playback unavailable");
+}
+void AudioServicesPlayAlertSoundWithCompletion(SystemSoundID sound, void (^completion)(void)) {
+    OSXER_APPS_STUB("alert playback unavailable; completing without audio");
+    if (completion) completion();
+}

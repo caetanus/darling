@@ -8,6 +8,9 @@ include_directories(
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 
+# OSXER APPS (alert completion blocks)
+set_source_files_properties(AudioServices.cpp PROPERTIES COMPILE_FLAGS "-fblocks")
+
 set(audiotoolbox_sources
 	AUComponent.cpp
 	AudioConverter.cpp

@@ -19,6 +19,8 @@ add_framework(WebKit
 
     SOURCES
         src/WebKit.m
+        # OSXER APPS (WebArchive)
+        src/WebArchive.m
         src/_WKActivatedElementInfo.m
         src/_WKApplicationManifest.m
         src/_WKAttachmentDisplayOptions.m

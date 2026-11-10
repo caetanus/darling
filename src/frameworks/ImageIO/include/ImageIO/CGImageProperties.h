@@ -23,3 +23,6 @@ IMAGEIO_EXTERN const CFStringRef kCGImagePropertyTIFFYResolution;
 IMAGEIO_EXTERN const CFStringRef kCGImagePropertyTIFFOrientation;
 
 IMAGEIO_EXTERN const CFStringRef kCGImagePropertyHasAlpha;
+
+// OSXER APPS (image depth)
+IMAGEIO_EXTERN const CFStringRef kCGImagePropertyDepth;
