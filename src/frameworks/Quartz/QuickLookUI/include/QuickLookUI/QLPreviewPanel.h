@@ -19,5 +19,47 @@
 
 #import <AppKit/AppKit.h>
 
+// OSXER APPKIT (quick look): Darling has no Quick Look generators. The panel exists and
+// keeps its data source, delegate and controller like Apple's; it shows the item's title and
+// says that a preview is not available.
+@class QLPreviewPanel;
+
+@protocol QLPreviewItem <NSObject>
+@property (readonly) NSURL *previewItemURL;
+@optional
+@property (readonly) NSString *previewItemTitle;
+@property (readonly) id previewItemDisplayState;
+@end
+
+@protocol QLPreviewPanelDataSource <NSObject>
+- (NSInteger)numberOfPreviewItemsInPreviewPanel:(QLPreviewPanel *)panel;
+- (id <QLPreviewItem>)previewPanel:(QLPreviewPanel *)panel previewItemAtIndex:(NSInteger)index;
+@end
+
+@protocol QLPreviewPanelDelegate <NSWindowDelegate>
+@optional
+- (BOOL)previewPanel:(QLPreviewPanel *)panel handleEvent:(NSEvent *)event;
+- (NSRect)previewPanel:(QLPreviewPanel *)panel sourceFrameOnScreenForPreviewItem:(id <QLPreviewItem>)item;
+@end
+
+@interface NSObject (QLPreviewPanelController)
+- (BOOL)acceptsPreviewPanelControl:(QLPreviewPanel *)panel;
+- (void)beginPreviewPanelControl:(QLPreviewPanel *)panel;
+- (void)endPreviewPanelControl:(QLPreviewPanel *)panel;
+@end
+
 @interface QLPreviewPanel : NSPanel
++ (QLPreviewPanel *)sharedPreviewPanel;
++ (BOOL)sharedPreviewPanelExists;
+@property (assign) id <QLPreviewPanelDataSource> dataSource;
+@property (readonly) id currentController;
+@property NSInteger currentPreviewItemIndex;
+@property (readonly) id <QLPreviewItem> currentPreviewItem;
+@property (readonly) BOOL inFullScreenMode;
+@property (readonly) BOOL isInFullScreenMode;
+- (void)updateController;
+- (void)reloadData;
+- (void)refreshCurrentPreviewItem;
+- (BOOL)enterFullScreenMode:(NSScreen *)screen withOptions:(NSDictionary *)options;
+- (void)exitFullScreenModeWithOptions:(NSDictionary *)options;
 @end
